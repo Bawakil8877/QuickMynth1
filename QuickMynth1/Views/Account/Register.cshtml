@@ -1,0 +1,167 @@
+﻿@model QuickMynth1.Models.ViewModels.RegisterViewModel
+
+<h2>Sign Up</h2>
+<form method="post" asp-action="Register" asp-controller="Account">
+    @if (User.IsInRole(QuickMynth1.Utility.Helper.Admin))
+    {
+        <h4>Register an admin account.</h4>
+    }
+    else
+    {
+        <h4>Create a new account.</h4>
+    }
+    <hr />
+    <div asp-validation-summary="All" class="text-danger"></div>
+
+    <!-- Name and Email fields -->
+    <div class="form-group row">
+        <label class="col-md-2" asp-for="Name"></label>
+        <div class="col-md-10">
+            <input asp-for="Name" class="form-control" />
+            <span asp-validation-for="Name" class="text-danger"></span>
+        </div>
+    </div>
+
+    <div class="form-group row">
+        <label class="col-md-2" asp-for="Email"></label>
+        <div class="col-md-10">
+            <input asp-for="Email" class="form-control" />
+            <span asp-validation-for="Email" class="text-danger"></span>
+        </div>
+    </div>
+
+    <!-- Password fields -->
+    <div class="form-group row">
+        <label class="col-md-2" asp-for="Password"></label>
+        <div class="col-md-10">
+            <input asp-for="Password" class="form-control" />
+            <span asp-validation-for="Password" class="text-danger"></span>
+        </div>
+    </div>
+    <div class="form-group row">
+        <label class="col-md-2" asp-for="ConfirmPassword"></label>
+        <div class="col-md-10">
+            <input asp-for="ConfirmPassword" class="form-control" />
+            <span asp-validation-for="ConfirmPassword" class="text-danger"></span>
+        </div>
+    </div>
+
+    <!-- Role dropdown -->
+    <div class="form-group row">
+        <label class="col-md-2" asp-for="RoleName"></label>
+        <div class="col-md-10">
+            <select asp-for="RoleName"
+                    id="roleSelect"
+                    asp-items="@QuickMynth1.Utility.Helper.GetRolesForDropDown(User.IsInRole(QuickMynth1.Utility.Helper.Admin))"
+                    class="form-control"></select>
+            <span asp-validation-for="RoleName" class="text-danger"></span>
+        </div>
+    </div>
+
+    <!-- EMPLOYEE fields -->
+    <div id="employeeFields" style="display: none;">
+        <div class="form-group row">
+            <label class="col-md-2" asp-for="Phone"></label>
+            <div class="col-md-10">
+                <input asp-for="Phone" class="form-control" />
+                <span asp-validation-for="Phone" class="text-danger"></span>
+            </div>
+        </div>
+
+        <div class="form-group row">
+            <label class="col-md-2" asp-for="SSN"></label>
+            <div class="col-md-10">
+                <input asp-for="SSN" class="form-control" />
+                <span asp-validation-for="SSN" class="text-danger"></span>
+            </div>
+        </div>
+
+        <div class="form-group row">
+            <label class="col-md-2" asp-for="HomeAddress"></label>
+            <div class="col-md-10">
+                <input asp-for="HomeAddress" class="form-control" />
+                <span asp-validation-for="HomeAddress" class="text-danger"></span>
+            </div>
+        </div>
+
+        <div class="form-group row">
+            <label class="col-md-2" asp-for="OfficeAddress"></label>
+            <div class="col-md-10">
+                <input asp-for="OfficeAddress" class="form-control" />
+                <span asp-validation-for="OfficeAddress" class="text-danger"></span>
+            </div>
+        </div>
+    </div>
+
+    <!-- EMPLOYER fields -->
+    <div id="employerFields" style="display: none;">
+        <div class="form-group row">
+            <label class="col-md-2" asp-for="EmployerName"></label>
+            <div class="col-md-10">
+                <input asp-for="EmployerName" class="form-control" />
+                <span asp-validation-for="EmployerName" class="text-danger"></span>
+            </div>
+        </div>
+
+        <div class="form-group row">
+            <label class="col-md-2" asp-for="CompanySize"></label>
+            <div class="col-md-10">
+                <input asp-for="CompanySize" class="form-control" />
+                <span asp-validation-for="CompanySize" class="text-danger"></span>
+            </div>
+        </div>
+
+        <div class="form-group row">
+            <label class="col-md-2" asp-for="ManagerEmail"></label>
+            <div class="col-md-10">
+                <input asp-for="ManagerEmail" class="form-control" />
+                <span asp-validation-for="ManagerEmail" class="text-danger"></span>
+            </div>
+        </div>
+    </div>
+
+    <div class="form-group">
+        <div class="col-md-10 offset-md-2">
+            <input type="submit" value="Register" class="btn btn-success" />
+        </div>
+    </div>
+
+    <p class="col-md-10 offset-md-2">
+        <a asp-action="Login">Sign In</a>
+    </p>
+</form>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+
+    <script>
+        function toggleFields(role) {
+            const employeeDiv = document.getElementById("employeeFields");
+            const employerDiv = document.getElementById("employerFields");
+
+            const employeeInputs = employeeDiv.querySelectorAll("input");
+            const employerInputs = employerDiv.querySelectorAll("input");
+
+            if (role === "Employee") {
+                employeeDiv.style.display = "block";
+                employerDiv.style.display = "none";
+            }
+            else if (role === "Employer") {
+                employerDiv.style.display = "block";
+                employeeDiv.style.display = "none";
+            }
+            else {
+                employeeDiv.style.display = "none";
+                employerDiv.style.display = "none";
+            }
+        }
+
+        document.getElementById("roleSelect").addEventListener("change", function () {
+            toggleFields(this.value);
+        });
+
+        window.onload = function () {
+            toggleFields(document.getElementById("roleSelect").value);
+        };
+    </script>
+}
