@@ -164,6 +164,7 @@ namespace QuickMynth1.Migrations
                         .HasColumnType("int");
 
                     b.Property<string>("CompanySize")
+                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("ConcurrencyStamp")
@@ -178,9 +179,11 @@ namespace QuickMynth1.Migrations
                         .HasColumnType("bit");
 
                     b.Property<string>("EmployerName")
+                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("HomeAddress")
+                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<bool>("LockoutEnabled")
@@ -190,6 +193,7 @@ namespace QuickMynth1.Migrations
                         .HasColumnType("datetimeoffset");
 
                     b.Property<string>("ManagerEmail")
+                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Name")
@@ -205,6 +209,7 @@ namespace QuickMynth1.Migrations
                         .HasColumnType("nvarchar(256)");
 
                     b.Property<string>("OfficeAddress")
+                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("PasswordHash")
@@ -221,6 +226,7 @@ namespace QuickMynth1.Migrations
                         .HasColumnType("bit");
 
                     b.Property<string>("SSN")
+                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("SecurityStamp")

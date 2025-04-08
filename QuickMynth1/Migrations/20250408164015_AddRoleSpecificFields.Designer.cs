@@ -12,8 +12,8 @@ using QuickMynth1.Data;
 namespace QuickMynth1.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20250407090802_InitialCreate")]
-    partial class InitialCreate
+    [Migration("20250408164015_AddRoleSpecificFields")]
+    partial class AddRoleSpecificFields
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -167,6 +167,7 @@ namespace QuickMynth1.Migrations
                         .HasColumnType("int");
 
                     b.Property<string>("CompanySize")
+                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("ConcurrencyStamp")
@@ -181,9 +182,11 @@ namespace QuickMynth1.Migrations
                         .HasColumnType("bit");
 
                     b.Property<string>("EmployerName")
+                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("HomeAddress")
+                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<bool>("LockoutEnabled")
@@ -193,6 +196,7 @@ namespace QuickMynth1.Migrations
                         .HasColumnType("datetimeoffset");
 
                     b.Property<string>("ManagerEmail")
+                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("Name")
@@ -208,6 +212,7 @@ namespace QuickMynth1.Migrations
                         .HasColumnType("nvarchar(256)");
 
                     b.Property<string>("OfficeAddress")
+                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("PasswordHash")
@@ -224,6 +229,7 @@ namespace QuickMynth1.Migrations
                         .HasColumnType("bit");
 
                     b.Property<string>("SSN")
+                        .IsRequired()
                         .HasColumnType("nvarchar(max)");
 
                     b.Property<string>("SecurityStamp")

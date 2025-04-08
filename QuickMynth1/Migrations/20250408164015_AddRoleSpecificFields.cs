@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace QuickMynth1.Migrations
 {
     /// <inheritdoc />
-    public partial class InitialCreate : Migration
+    public partial class AddRoleSpecificFields : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -31,13 +31,13 @@ namespace QuickMynth1.Migrations
                 {
                     Id = table.Column<string>(type: "nvarchar(450)", nullable: false),
                     Name = table.Column<string>(type: "nvarchar(max)", nullable: false),
-                    SSN = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    HomeAddress = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    OfficeAddress = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    EmployerName = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    CompanySize = table.Column<string>(type: "nvarchar(max)", nullable: true),
-                    ManagerEmail = table.Column<string>(type: "nvarchar(max)", nullable: true),
                     Phone = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    SSN = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    HomeAddress = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    OfficeAddress = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    EmployerName = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    CompanySize = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    ManagerEmail = table.Column<string>(type: "nvarchar(max)", nullable: false),
                     UserName = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: true),
                     NormalizedUserName = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: true),
                     Email = table.Column<string>(type: "nvarchar(256)", maxLength: 256, nullable: true),

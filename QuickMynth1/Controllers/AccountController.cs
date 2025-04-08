@@ -49,62 +49,58 @@ namespace QuickMynth1.Controllers
         }
         public async Task<IActionResult> Register()
         {
-            // _roleManager.RoleExistsAsync checks whether the value (Helper.Admin) exists in database or not
+            // Ensure roles exist (only Admin and Employee)
             if (!_roleManager.RoleExistsAsync(Helper.Admin).GetAwaiter().GetResult())
             {
                 await _roleManager.CreateAsync(new IdentityRole(Helper.Admin));
-                await _roleManager.CreateAsync(new IdentityRole(Helper.Employee));
-                await _roleManager.CreateAsync(new IdentityRole(Helper.Employer));
             }
+
+            if (!_roleManager.RoleExistsAsync(Helper.Employee).GetAwaiter().GetResult())
+            {
+                await _roleManager.CreateAsync(new IdentityRole(Helper.Employee));
+            }
+
             return View();
         }
+
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Register(RegisterViewModel model)
         {
-            if (ModelState.IsValid)
+            if (!ModelState.IsValid)
             {
-                // Check the role selected
-                if (model.RoleName == "Employee")
-                {
-                    // Validate employee-specific fields
-                    if (string.IsNullOrEmpty(model.Phone) || string.IsNullOrEmpty(model.SSN))
-                    {
-                        ModelState.AddModelError("", "Employee fields must be filled.");
-                        return View(model);
-                    }
-                }
-                else if (model.RoleName == "Employer")
-                {
-                    // Validate employer-specific fields
-                    if (string.IsNullOrEmpty(model.EmployerName) || string.IsNullOrEmpty(model.CompanySize))
-                    {
-                        ModelState.AddModelError("", "Employer fields must be filled.");
-                        return View(model);
-                    }
-                }
-
-                // Proceed with user registration
-                var user = new ApplicationUser { UserName = model.Email, Email = model.Email, Name = model.Name };
-
-                var result = await _userManager.CreateAsync(user, model.Password);
-
-                if (result.Succeeded)
-                {
-                    // Assign the correct role
-                    await _userManager.AddToRoleAsync(user, model.RoleName);
-
-                    return RedirectToAction("Index", "Home"); // Or wherever you want to redirect after successful registration
-                }
-                foreach (var error in result.Errors)
-                {
-                    ModelState.AddModelError("", error.Description);
-                }
+                return View(model);
             }
+
+            var user = new ApplicationUser
+            {
+                UserName = model.Email,
+                Email = model.Email,
+                Name = model.Name,
+                Phone = model.Phone,
+                SSN = model.SSN,
+                HomeAddress = model.HomeAddress,
+                OfficeAddress = model.OfficeAddress,
+                EmployerName = model.EmployerName,
+                CompanySize = model.CompanySize,
+                ManagerEmail = model.ManagerEmail
+            };
+
+            var result = await _userManager.CreateAsync(user, model.Password);
+
+            if (result.Succeeded)
+            {
+                await _userManager.AddToRoleAsync(user, Helper.Employee);
+                return RedirectToAction("Index", "Home");
+            }
+
+            foreach (var error in result.Errors)
+            {
+                ModelState.AddModelError("", error.Description);
+            }
+
             return View(model);
         }
-
-
 
         public async Task<IActionResult> LogOff()
         {
