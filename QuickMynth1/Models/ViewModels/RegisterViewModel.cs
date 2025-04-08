@@ -1,41 +1,56 @@
-﻿using System.ComponentModel;
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
+using System.Collections.Generic;
 
-namespace QuickMynth1.Models.ViewModels
+public class RegisterViewModel : IValidatableObject
 {
-    public class RegisterViewModel
+    [Required]
+    public string Name { get; set; }
+
+    [Required, EmailAddress]
+    public string Email { get; set; }
+
+    [Required, DataType(DataType.Password)]
+    public string Password { get; set; }
+
+    [Required, DataType(DataType.Password), Compare("Password")]
+    public string ConfirmPassword { get; set; }
+
+    [Required]
+    public string RoleName { get; set; }
+
+    // Employee fields
+    public string Phone { get; set; }
+    public string SSN { get; set; }
+    public string HomeAddress { get; set; }
+    public string OfficeAddress { get; set; }
+
+    // Employer fields
+    public string EmployerName { get; set; }
+    public string CompanySize { get; set; }
+    public string ManagerEmail { get; set; }
+
+    // Conditional validation
+    public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
-        [Required]
-        public string Name { get; set; }
-
-        [Required]
-        [EmailAddress]
-        public string Email { get; set; }
-
-        [Required]
-        [DataType(DataType.Password)]
-        [StringLength(100, ErrorMessage = "The password must be at least 6 characters long.")]
-        public string Password { get; set; }
-
-        [DataType(DataType.Password)]
-        [Display(Name = "Confirm Password")]
-        [Compare("Password", ErrorMessage = "The passwords don't match.")]
-        public string ConfirmPassword { get; set; }
-
-        [Required]
-        [DisplayName("Role Name")]
-        public string RoleName { get; set; }
-
-        // EMPLOYEE-specific fields
-        public string Phone { get; set; }
-        public string SSN { get; set; }
-        public string HomeAddress { get; set; }
-        public string OfficeAddress { get; set; }
-
-        // EMPLOYER-specific fields
-        public string EmployerName { get; set; }
-        public string CompanySize { get; set; }
-        public string ManagerEmail { get; set; }
+        if (RoleName == "Employee")
+        {
+            if (string.IsNullOrWhiteSpace(Phone))
+                yield return new ValidationResult("Phone is required for Employee", new[] { "Phone" });
+            if (string.IsNullOrWhiteSpace(SSN))
+                yield return new ValidationResult("SSN is required for Employee", new[] { "SSN" });
+            if (string.IsNullOrWhiteSpace(HomeAddress))
+                yield return new ValidationResult("Home Address is required for Employee", new[] { "HomeAddress" });
+            if (string.IsNullOrWhiteSpace(OfficeAddress))
+                yield return new ValidationResult("Office Address is required for Employee", new[] { "OfficeAddress" });
+        }
+        else if (RoleName == "Employer")
+        {
+            if (string.IsNullOrWhiteSpace(EmployerName))
+                yield return new ValidationResult("Employer Name is required for Employer", new[] { "EmployerName" });
+            if (string.IsNullOrWhiteSpace(CompanySize))
+                yield return new ValidationResult("Company Size is required for Employer", new[] { "CompanySize" });
+            if (string.IsNullOrWhiteSpace(ManagerEmail))
+                yield return new ValidationResult("Manager Email is required for Employer", new[] { "ManagerEmail" });
+        }
     }
 }
-
