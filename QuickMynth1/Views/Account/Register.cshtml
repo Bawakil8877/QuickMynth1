@@ -63,13 +63,20 @@
 
     <div class="form-group">
         <label asp-for="CompanySize"></label>
-        <input asp-for="CompanySize" class="form-control" />
+        <select asp-for="CompanySize" class="form-control">
+            <option value="">-- Select Company Size --</option>
+            <option>1-10</option>
+            <option>11-25</option>
+            <option>26-50</option>
+            <option>51-100</option>
+            <option>100+</option>
+        </select>
         <span asp-validation-for="CompanySize" class="text-danger"></span>
     </div>
 
     <div class="form-group">
         <label asp-for="ManagerEmail"></label>
-        <input asp-for="ManagerEmail" class="form-control" />
+        <input asp-for="ManagerEmail" class="form-control" placeholder="hr@acmecorp.com" />
         <span asp-validation-for="ManagerEmail" class="text-danger"></span>
     </div>
 
