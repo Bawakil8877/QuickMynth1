@@ -3,67 +3,37 @@ using Microsoft.Extensions.Configuration;
 using MailKit.Net.Smtp;
 using MailKit.Security;
 using MimeKit;
-
+using System.Threading.Tasks;
 namespace QuickMynth1.Services
 {
-    //public class EmailService
-    //{
-    //    public async void SendEmail(EmailModel emailModel)
-    //    {
-    //        var message = new MimeMessage();
-    //        message.From.Add(new MailboxAddress("Haris QuickMynthcheduler", emailModel.From));
-    //        message.To.Add(new MailboxAddress("", emailModel.To));
-    //        message.Subject = emailModel.Subject;
-
-    //        message.Body = new TextPart("plain")
-    //        {
-    //            Text = emailModel.Body
-    //        };
-
-    //        using (var client = new SmtpClient())
-    //        {
-    //            client.Connect("smtp.gmail.com", 587, MailKit.Security.SecureSocketOptions.StartTls);
-    //            client.Authenticate("abbasiharis1997@gmail.com", "lrndjowzdjomqeql");
-
-    //            client.Send(message);
-    //            client.Disconnect(true);
-    //        }
-    //    }
-    //}
+ 
 
     public class EmailService
     {
-        private readonly IConfiguration _configuration;
+        private readonly string _smtpServer = "smtp.gmail.com";  // Or any SMTP service
+        private readonly int _smtpPort = 587;
+        private readonly string _emailFrom = "07026981622mustapha@gmail.com";
+        private readonly string _password = "fdar djcl paia bhtu";  // You should use App passwords or a service key for better security
 
-        public EmailService(IConfiguration configuration)
+        public async Task SendEmailAsync(string emailTo, string subject, string message)
         {
-            _configuration = configuration;
-        }
+            var emailMessage = new MimeMessage();
+            emailMessage.From.Add(new MailboxAddress("QuickMynth", _emailFrom));
+            emailMessage.To.Add(new MailboxAddress("", emailTo));
+            emailMessage.Subject = subject;
 
-        public async Task SendEmailAsync(EmailModel emailModel)
-        {
-            var message = new MimeMessage();
-            message.From.Add(new MailboxAddress("Haris QuickMynthcheduler", emailModel.From));  // Updated user name
-            message.To.Add(new MailboxAddress("", emailModel.To));
-            message.Subject = emailModel.Subject;
-
-            message.Body = new TextPart("plain")
-            {
-                Text = emailModel.Body
-            };
+            var bodyBuilder = new BodyBuilder { HtmlBody = message };
+            emailMessage.Body = bodyBuilder.ToMessageBody();
 
             using (var client = new SmtpClient())
             {
-                // Updated client connect configuration for Gmail with TLS
-                await client.ConnectAsync("smtp.gmail.com", 587, MailKit.Security.SecureSocketOptions.StartTls);
-
-                // Updated email and password
-                await client.AuthenticateAsync("abbasiharis1997@gmail.com", "YOUR_APP_PASSWORD");
-
-                await client.SendAsync(message);
+                await client.ConnectAsync(_smtpServer, _smtpPort, false);
+                await client.AuthenticateAsync(_emailFrom, _password);
+                await client.SendAsync(emailMessage);
                 await client.DisconnectAsync(true);
             }
         }
     }
+
 }
 

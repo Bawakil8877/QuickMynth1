@@ -2,27 +2,43 @@
 using QuickMynth1.Utility;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-
+using QuickMynth1.Models.ViewModels;
+using Microsoft.AspNetCore.Identity;
+using QuickMynth1.Data;
+using QuickMynth1.Models;
 namespace QuickMynth1.Controllers
 {
     [Authorize]
+   
+
     public class QuickMynthController : Controller
     {
-        private readonly IQuickMynthervice _QuickMynthervice;
-        public QuickMynthController(IQuickMynthervice QuickMynthervice)
+        private readonly ApplicationDbContext _context;
+        private readonly UserManager<ApplicationUser> _userManager;
+
+        public QuickMynthController(ApplicationDbContext context, UserManager<ApplicationUser> userManager)
         {
-            _QuickMynthervice = QuickMynthervice;
+            _context = context;
+            _userManager = userManager;
         }
-        //[Authorize]
-        //[Authorize(Roles =Helper.Admin)] //the role (e.g.Admin) must be of type const
-        public IActionResult Index()
+
+        public async Task<IActionResult> Index()
         {
-            ViewBag.DoctorList = _QuickMynthervice.GetDoctorList();
-            ViewBag.PatientList = _QuickMynthervice.GetPatientList();
-            ViewBag.Duration = Helper.GetTimeDropDown();
-            // Session variable (a global variable accessable throughout the app)
-            HttpContext.Session.SetString("UserName", "Haris");
-            return View();
+            var user = await _userManager.GetUserAsync(User);
+
+            if (user == null)
+            {
+                return RedirectToAction("Login", "Account");
+            }
+
+            var model = new RegisterViewModel
+            {
+                Email = user.Email,
+                ManagerEmail = user.ManagerEmail // assuming this is a custom property in your ApplicationUser
+            };
+
+            return View(model);
         }
     }
+
 }
