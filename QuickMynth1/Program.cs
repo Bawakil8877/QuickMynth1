@@ -5,8 +5,33 @@ using QuickMynth1.Services;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.UI.Services;
 using Microsoft.EntityFrameworkCore;
+using Google.Apis.Auth.OAuth2;
+using Google.Apis.Gmail.v1;
+using Google.Apis.Services;
+
 
 var builder = WebApplication.CreateBuilder(args);
+// Configure Google OAuth service
+builder.Services.AddSingleton<GmailService>(sp =>
+{
+    // Retrieve OAuth details from appsettings.json
+    var config = builder.Configuration.GetSection("GoogleOAuth");
+    var clientId = config["ClientId"];
+    var clientSecret = config["ClientSecret"];
+    var redirectUri = config["RedirectUri"];
+    var applicationName = config["ApplicationName"];
+
+    // Set up OAuth2 credentials
+    var credentials = GoogleCredential.FromFile("path-to-your-credentials-file.json")
+        .CreateScoped(GmailService.Scope.GmailSend);
+
+    // Create and return GmailService instance
+    return new GmailService(new BaseClientService.Initializer()
+    {
+        HttpClientInitializer = credentials,
+        ApplicationName = applicationName
+    });
+});
 
 // Add services to the container.
 builder.Services.AddControllersWithViews();
@@ -20,7 +45,12 @@ builder.Services.AddTransient<IQuickMynthervice, QuickMynthervice>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddDistributedMemoryCache();
 builder.Services.AddTransient<EmailService>();
+builder.Services.AddSession();
 builder.Services.AddScoped<IDbInitializer, DbInitializer>();
+// In Program.cs or Startup.cs
+builder.Services.Configure<GoogleOAuthSettings>(builder.Configuration.GetSection("GoogleOAuth"));
+builder.Services.AddSingleton<GoogleOAuthService>();
+
 builder.Services.AddSession(options =>
 {
     options.IdleTimeout = TimeSpan.FromMinutes(30);
@@ -50,7 +80,6 @@ if (!app.Environment.IsDevelopment())
     // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
 }
-
 app.UseHttpsRedirection();
 app.UseStaticFiles();
 

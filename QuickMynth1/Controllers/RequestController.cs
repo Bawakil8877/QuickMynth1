@@ -1,69 +1,76 @@
-﻿using Microsoft.AspNetCore.Identity;
+﻿
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using QuickMynth1.Models;
-using QuickMynth1.Models.ViewModels;
 using QuickMynth1.Services;
+using Microsoft.AspNetCore.Identity;
+using QuickMynth1.Models;
+using System.Security.Claims;
+using Google.Apis.Auth.OAuth2.Responses;
+using QuickMynth1.Models.ViewModels;  // Add the namespace for the ViewModel
 
 namespace QuickMynth1.Controllers
 {
+    [Authorize]
     public class RequestController : Controller
     {
+        private readonly GoogleOAuthService _googleOAuthService;
         private readonly UserManager<ApplicationUser> _userManager;
-        private readonly EmailService _emailService;
 
-        public RequestController(UserManager<ApplicationUser> userManager, EmailService emailService)
+        public RequestController(GoogleOAuthService googleOAuthService, UserManager<ApplicationUser> userManager)
         {
+            _googleOAuthService = googleOAuthService;
             _userManager = userManager;
-            _emailService = emailService;
         }
 
-        [HttpGet]
-        public async Task<IActionResult> StartRequestForm()
+        // Step 1: After login, user clicks button to start request
+        public IActionResult StartRequest()
         {
-            var user = await _userManager.GetUserAsync(User);
-            if (user == null)
-            {
-                return RedirectToAction("Login", "Account");
-            }
+            var authorizationUrl = _googleOAuthService.GenerateAuthorizationUrl();
+            return Redirect(authorizationUrl);
+        }
 
-            var model = new RegisterViewModel
+        // Step 2: Google redirects back here with the auth code
+        public async Task<IActionResult> OAuthCallback(string code)
+        {
+            if (string.IsNullOrEmpty(code))
+                return RedirectToAction("Error");
+
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var token = await _googleOAuthService.ExchangeCodeForTokenAsync(code, userId);
+
+            // Now send the email using this user's token
+            var user = await _userManager.FindByIdAsync(userId);
+
+            string subject = "Pay Advance Request";
+            string body = $@"
+        <h2>Pay Advance Request</h2>
+        <p>Employee {user.Email} is requesting a pay advance.</p>
+        <p>Please approve or reject the request.</p>
+        <p><a href='#'>Approve</a> | <a href='#'>Reject</a></p>";
+
+            await _googleOAuthService.SendEmailUsingUserToken(user.Email, user.ManagerEmail, subject, body, userId);
+
+            TempData["EmailResult"] = "Request sent successfully!";
+            return RedirectToAction("RequestStatus");
+        }
+
+
+        public IActionResult RequestStatus()
+        {
+            // Create a ViewModel with some example status and message
+            var model = new RequestStatusViewModel
             {
-                Email = user.Email,
-                ManagerEmail = user.ManagerEmail
+                Status = "Success",  // Set status dynamically if needed
+                Message = TempData["EmailResult"] as string ?? "No message available."
             };
 
             return View(model);
         }
 
 
-        // Handle the POST request
-        [HttpPost]
-        public async Task<IActionResult> StartRequest(RegisterViewModel model)
+        public IActionResult Error()
         {
-            if (ModelState.IsValid)
-            {
-                string subject = "Get up to $500 for each advance request — $5 flat fee. No interest. No credit checks.";
-
-                string message = @"
-                <h3>To get started, we’ll need one-time approval from your employer.</h3>
-                <p>This helps us confirm what you’ve already earned each time you want to access pay advance.</p>
-                <p><strong>Why employer approval?</strong> <a href='https://yourwebsite.com/learn-more'>Learn more</a></p>
-                <p>Request sent by: <strong>" + model.Email + @"</strong></p>";
-
-                await _emailService.SendEmailAsync(model.ManagerEmail, subject, message);
-
-                TempData["Success"] = "Request sent successfully!";
-                return RedirectToAction("Confirmation"); // Create a confirmation view if you want
-            }
-
-            return View("StartRequestForm", model);
-        }
-
-        // Optional confirmation view
-        public IActionResult Confirmation()
-        {
-            return View();
+            return Content("Authorization failed.");
         }
     }
-
 }

@@ -13,32 +13,15 @@ namespace QuickMynth1.Controllers
 
     public class QuickMynthController : Controller
     {
-        private readonly ApplicationDbContext _context;
-        private readonly UserManager<ApplicationUser> _userManager;
+       
 
-        public QuickMynthController(ApplicationDbContext context, UserManager<ApplicationUser> userManager)
+
+        public IActionResult Index()
         {
-            _context = context;
-            _userManager = userManager;
+            return View();
         }
 
-        public async Task<IActionResult> Index()
-        {
-            var user = await _userManager.GetUserAsync(User);
 
-            if (user == null)
-            {
-                return RedirectToAction("Login", "Account");
-            }
-
-            var model = new RegisterViewModel
-            {
-                Email = user.Email,
-                ManagerEmail = user.ManagerEmail // assuming this is a custom property in your ApplicationUser
-            };
-
-            return View(model);
-        }
     }
 
 }

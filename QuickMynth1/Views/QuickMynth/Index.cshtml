@@ -1,27 +1,39 @@
 ﻿@model QuickMynth1.Models.ViewModels.RegisterViewModel
 
-<div class="container mt-4">
-    @if (User.Identity.IsAuthenticated && Model != null)
+<h2>Advance Request</h2>
+
+<p>
+    Get up to $500 for each advance request — $5 flat fee. No interest. No credit checks.
+</p>
+
+<p>
+    To get started, we’ll need one-time approval from your employer. This helps us confirm what you’ve already earned each time you want to access pay advance.
+</p>
+
+<p>
+    <strong>Why employer approval? <a href="#">Learn more</a></strong>
+</p>
+
+@if (User.Identity.IsAuthenticated)  // Ensure the user is logged in
+{
+       
+
+    <form asp-controller="Request" asp-action="StartRequest" method="post">
+        <button type="submit" class="btn btn-primary">Start My Request</button>
+    </form>
+
+
+    @if (TempData["EmailResult"] != null)
     {
-        <form method="post" action="@Url.Action("StartRequest", "Request")">
-            <input type="hidden" name="Email" value="@Model.Email" />
-            <input type="hidden" name="ManagerEmail" value="@Model.ManagerEmail" />
-            <div class="subheader mb-2">
-                <strong>Get up to $500 for each advance request — $5 flat fee. No interest. No credit checks.</strong>
-            </div>
-            <p>To get started, we’ll need one-time approval from your employer. This helps us confirm what you’ve already earned each time you want to access pay advance.</p>
-            <p><a href="/learn-more">Why employer approval? Learn more</a></p>
-            <button type="submit" class="btn btn-primary mt-2">Start My Request</button>
-        </form>
-    }
-    else
-    {
-        <div class="alert alert-warning">
-            You are logged in, but your information is not available.
+        <div class="alert alert-info">
+            @TempData["EmailResult"]
         </div>
     }
-</div>
-
-
+}
+else
+{
+    <p>You need to be logged in to make a request.</p>
+}
 
 <partial name="_AddEditQuickMynth" />
+

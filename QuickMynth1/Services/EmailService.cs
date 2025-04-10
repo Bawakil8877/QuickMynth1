@@ -4,36 +4,52 @@ using MailKit.Net.Smtp;
 using MailKit.Security;
 using MimeKit;
 using System.Threading.Tasks;
+using System.Net.Mail;
+using System.Net;
+using Microsoft.AspNetCore.Mvc;
+
 namespace QuickMynth1.Services
 {
- 
+
 
     public class EmailService
     {
-        private readonly string _smtpServer = "smtp.gmail.com";  // Or any SMTP service
-        private readonly int _smtpPort = 587;
-        private readonly string _emailFrom = "07026981622mustapha@gmail.com";
-        private readonly string _password = "fdar djcl paia bhtu";  // You should use App passwords or a service key for better security
 
-        public async Task SendEmailAsync(string emailTo, string subject, string message)
+
+        public bool SendEmailToEmployer(Controller controller, string employeeEmail, string employerEmail)
         {
-            var emailMessage = new MimeMessage();
-            emailMessage.From.Add(new MailboxAddress("QuickMynth", _emailFrom));
-            emailMessage.To.Add(new MailboxAddress("", emailTo));
-            emailMessage.Subject = subject;
-
-            var bodyBuilder = new BodyBuilder { HtmlBody = message };
-            emailMessage.Body = bodyBuilder.ToMessageBody();
-
-            using (var client = new SmtpClient())
+            try
             {
-                await client.ConnectAsync(_smtpServer, _smtpPort, false);
-                await client.AuthenticateAsync(_emailFrom, _password);
-                await client.SendAsync(emailMessage);
-                await client.DisconnectAsync(true);
+                var smtpClient = new System.Net.Mail.SmtpClient("smtp.gmail.com")
+                {
+                    Port = 587,
+                    Credentials = new NetworkCredential("yourgmail@gmail.com", "yourAppPassword"), // Replace this
+                    EnableSsl = true,
+                };
+
+                var mailMessage = new MailMessage
+                {
+                    From = new MailAddress("yourgmail@gmail.com"),
+                    Subject = "Advance Request",
+                    Body = $"An advance request was made by employee: {employeeEmail}. Please approve it.",
+                    IsBodyHtml = false,
+                };
+
+                mailMessage.To.Add(employerEmail);
+                smtpClient.Send(mailMessage);
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                controller.TempData["EmailResult"] = "Failed to send the email: " + ex.Message;
+                return false;
             }
         }
+
+
     }
+
 
 }
 
