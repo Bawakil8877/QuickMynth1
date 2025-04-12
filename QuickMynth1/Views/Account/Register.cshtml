@@ -1,89 +1,142 @@
 ﻿@model QuickMynth1.Models.ViewModels.RegisterViewModel
 
-<h2>Sign Up</h2>
-<form method="post" asp-action="Register" asp-controller="Account">
-    <div asp-validation-summary="All" class="text-danger"></div>
+@{
+    Layout = "_Layout";  // Ensure we're using the correct layout file.
+}
 
-    <!-- Common Fields -->
-    <div class="form-group">
-        <label asp-for="Name"></label>
-        <input asp-for="Name" class="form-control" />
-        <span asp-validation-for="Name" class="text-danger"></span>
-    </div>
+<style>
+    /* Only target this view for custom styling */
+    .auth-card {
+        max-width: 400px; /* Reduced width */
+        margin: 0 auto;
+        background-color: #ffffff;
+        padding: 25px;
+        border-radius: 10px;
+        box-shadow: 0px 6px 16px rgba(0, 0, 0, 0.1);
+    }
 
-    <div class="form-group">
-        <label asp-for="Email"></label>
-        <input asp-for="Email" class="form-control" />
-        <span asp-validation-for="Email" class="text-danger"></span>
-    </div>
+        .auth-card input,
+        .auth-card select {
+            font-size: 0.875rem; /* Smaller font size for inputs */
+            padding: 0.5rem; /* Smaller padding for inputs */
+        }
 
-    <div class="form-group">
-        <label asp-for="Password"></label>
-        <input asp-for="Password" class="form-control" />
-        <span asp-validation-for="Password" class="text-danger"></span>
-    </div>
+        .auth-card label {
+            font-size: 0.875rem;
+            margin-bottom: 0.25rem;
+        }
 
-    <div class="form-group">
-        <label asp-for="ConfirmPassword"></label>
-        <input asp-for="ConfirmPassword" class="form-control" />
-        <span asp-validation-for="ConfirmPassword" class="text-danger"></span>
-    </div>
+        .auth-card .btn {
+            font-size: 0.875rem; /* Smaller button size */
+            padding: 0.5rem 1rem;
+        }
 
-    <!-- Employee Fields -->
-    <div class="form-group">
-        <label asp-for="Phone"></label>
-        <input asp-for="Phone" class="form-control" />
-        <span asp-validation-for="Phone" class="text-danger"></span>
-    </div>
+        .auth-card .form-group {
+            margin-bottom: 1.5rem; /* Adjust spacing between form groups */
+        }
 
-    <div class="form-group">
-        <label asp-for="SSN"></label>
-        <input asp-for="SSN" class="form-control" />
-        <span asp-validation-for="SSN" class="text-danger"></span>
-    </div>
+        .auth-card .text-danger {
+            font-size: 0.75rem;
+        }
 
-    <div class="form-group">
-        <label asp-for="HomeAddress"></label>
-        <input asp-for="HomeAddress" class="form-control" />
-        <span asp-validation-for="HomeAddress" class="text-danger"></span>
-    </div>
+        .auth-card .d-flex {
+            justify-content: space-between;
+        }
+</style>
 
-    <div class="form-group">
-        <label asp-for="OfficeAddress"></label>
-        <input asp-for="OfficeAddress" class="form-control" />
-        <span asp-validation-for="OfficeAddress" class="text-danger"></span>
-    </div>
+<div class="container mt-5">
+    <div class="auth-card">
+        <h3 class="text-center mb-4">Sign Up</h3>
 
-    <!-- Employer Fields -->
-    <div class="form-group">
-        <label asp-for="EmployerName"></label>
-        <input asp-for="EmployerName" class="form-control" />
-        <span asp-validation-for="EmployerName" class="text-danger"></span>
-    </div>
+        <form method="post" asp-action="Register" asp-controller="Account">
+            <div asp-validation-summary="All" class="text-danger mb-3"></div>
 
-    <div class="form-group">
-        <label asp-for="CompanySize"></label>
-        <select asp-for="CompanySize" class="form-control">
-            <option value="">-- Select Company Size --</option>
-            <option>1-10</option>
-            <option>11-25</option>
-            <option>26-50</option>
-            <option>51-100</option>
-            <option>100+</option>
-        </select>
-        <span asp-validation-for="CompanySize" class="text-danger"></span>
-    </div>
+            <!-- Common Fields -->
+            <div class="form-group">
+                <label asp-for="Name"></label>
+                <input asp-for="Name" class="form-control" />
+                <span asp-validation-for="Name" class="text-danger"></span>
+            </div>
 
-    <div class="form-group">
-        <label asp-for="ManagerEmail"></label>
-        <input asp-for="ManagerEmail" class="form-control" placeholder="hr@acmecorp.com" />
-        <span asp-validation-for="ManagerEmail" class="text-danger"></span>
-    </div>
+            <div class="form-group">
+                <label asp-for="Email"></label>
+                <input asp-for="Email" class="form-control" />
+                <span asp-validation-for="Email" class="text-danger"></span>
+            </div>
 
-    <div class="form-group">
-        <input type="submit" value="Register" class="btn btn-success" />
+            <div class="form-group">
+                <label asp-for="Password"></label>
+                <input asp-for="Password" class="form-control" />
+                <span asp-validation-for="Password" class="text-danger"></span>
+            </div>
+
+            <div class="form-group">
+                <label asp-for="ConfirmPassword"></label>
+                <input asp-for="ConfirmPassword" class="form-control" />
+                <span asp-validation-for="ConfirmPassword" class="text-danger"></span>
+            </div>
+
+            <!-- Employee Fields -->
+            <div class="form-group">
+                <label asp-for="Phone"></label>
+                <input asp-for="Phone" class="form-control" />
+                <span asp-validation-for="Phone" class="text-danger"></span>
+            </div>
+
+            <div class="form-group">
+                <label asp-for="SSN"></label>
+                <input asp-for="SSN" class="form-control" />
+                <span asp-validation-for="SSN" class="text-danger"></span>
+            </div>
+
+            <div class="form-group">
+                <label asp-for="HomeAddress"></label>
+                <input asp-for="HomeAddress" class="form-control" />
+                <span asp-validation-for="HomeAddress" class="text-danger"></span>
+            </div>
+
+            <div class="form-group">
+                <label asp-for="OfficeAddress"></label>
+                <input asp-for="OfficeAddress" class="form-control" />
+                <span asp-validation-for="OfficeAddress" class="text-danger"></span>
+            </div>
+
+            <!-- Employer Fields -->
+            <div class="form-group">
+                <label asp-for="EmployerName"></label>
+                <input asp-for="EmployerName" class="form-control" />
+                <span asp-validation-for="EmployerName" class="text-danger"></span>
+            </div>
+
+            <div class="form-group">
+                <label asp-for="CompanySize"></label>
+                <select asp-for="CompanySize" class="form-control">
+                    <option value="">-- Select Company Size --</option>
+                    <option>1-10</option>
+                    <option>11-25</option>
+                    <option>26-50</option>
+                    <option>51-100</option>
+                    <option>100+</option>
+                </select>
+                <span asp-validation-for="CompanySize" class="text-danger"></span>
+            </div>
+
+            <div class="form-group">
+                <label asp-for="ManagerEmail"></label>
+                <input asp-for="ManagerEmail" class="form-control" placeholder="hr@acmecorp.com" />
+                <span asp-validation-for="ManagerEmail" class="text-danger"></span>
+            </div>
+
+            <div class="form-group mt-4">
+                <div class="d-flex">
+                    <input type="submit" value="Register" class="btn btn-success" />
+                    <a asp-action="Login" class="btn btn-outline-primary">Sign In</a>
+                </div>
+            </div>
+
+        </form>
     </div>
-</form>
+</div>
 
 @section Scripts {
     <partial name="_ValidationScriptsPartial" />
