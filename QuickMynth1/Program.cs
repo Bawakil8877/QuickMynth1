@@ -50,6 +50,9 @@ builder.Services.AddScoped<IDbInitializer, DbInitializer>();
 // In Program.cs or Startup.cs
 builder.Services.Configure<GoogleOAuthSettings>(builder.Configuration.GetSection("GoogleOAuth"));
 builder.Services.AddSingleton<GoogleOAuthService>();
+builder.Services.AddHttpClient();
+builder.Services.AddScoped<OAuthService>();
+
 
 builder.Services.AddSession(options =>
 {

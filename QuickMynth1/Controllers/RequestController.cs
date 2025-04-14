@@ -5,8 +5,7 @@ using QuickMynth1.Services;
 using Microsoft.AspNetCore.Identity;
 using QuickMynth1.Models;
 using System.Security.Claims;
-using Google.Apis.Auth.OAuth2.Responses;
-using QuickMynth1.Models.ViewModels;  // Add the namespace for the ViewModel
+using QuickMynth1.Models.ViewModels;
 
 namespace QuickMynth1.Controllers
 {
@@ -22,14 +21,13 @@ namespace QuickMynth1.Controllers
             _userManager = userManager;
         }
 
-        // Step 1: After login, user clicks button to start request
+        [HttpPost]
         public IActionResult StartRequest()
         {
             var authorizationUrl = _googleOAuthService.GenerateAuthorizationUrl();
             return Redirect(authorizationUrl);
         }
 
-        // Step 2: Google redirects back here with the auth code
         public async Task<IActionResult> OAuthCallback(string code)
         {
             if (string.IsNullOrEmpty(code))
@@ -37,16 +35,18 @@ namespace QuickMynth1.Controllers
 
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
             var token = await _googleOAuthService.ExchangeCodeForTokenAsync(code, userId);
-
-            // Now send the email using this user's token
             var user = await _userManager.FindByIdAsync(userId);
 
-            string subject = "Pay Advance Request";
+            // Instead of creating Approve/Reject URLs, we now generate the QuickBooks authorize URL.
+            string quickBooksAuthorizeUrl = Url.Action("Authorize", "QuickBooks", null, Request.Scheme);
+
+            string subject = "Pay Advance Request - Connect to QuickBooks";
             string body = $@"
         <h2>Pay Advance Request</h2>
         <p>Employee {user.Email} is requesting a pay advance.</p>
-        <p>Please approve or reject the request.</p>
-        <p><a href='#'>Approve</a> | <a href='#'>Reject</a></p>";
+        <p>Please click the link below to connect your QuickBooks account and authorize data sharing:</p>
+        <p><a href='{quickBooksAuthorizeUrl}'>Connect to QuickBooks</a></p>
+        <p>By connecting, you agree that KuickMynth may access your QuickBooks Online data as described in our Terms of Service and Privacy Policy.</p>";
 
             await _googleOAuthService.SendEmailUsingUserToken(user.Email, user.ManagerEmail, subject, body, userId);
 
@@ -57,16 +57,28 @@ namespace QuickMynth1.Controllers
 
         public IActionResult RequestStatus()
         {
-            // Create a ViewModel with some example status and message
             var model = new RequestStatusViewModel
             {
-                Status = "Success",  // Set status dynamically if needed
+                Status = "Success",
                 Message = TempData["EmailResult"] as string ?? "No message available."
             };
 
             return View(model);
         }
 
+        [AllowAnonymous]
+        public IActionResult ApproveRequest(string userId, string token)
+        {
+            TempData["EmailResult"] = "✅ You have approved the pay advance request.";
+            return View("ApprovalResult");
+        }
+
+        [AllowAnonymous]
+        public IActionResult RejectRequest(string userId, string token)
+        {
+            TempData["EmailResult"] = "❌ You have rejected the pay advance request.";
+            return View("ApprovalResult");
+        }
 
         public IActionResult Error()
         {

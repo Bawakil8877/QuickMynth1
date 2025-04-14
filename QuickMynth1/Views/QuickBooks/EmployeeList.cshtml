@@ -1,0 +1,34 @@
+﻿@model dynamic
+@{
+    ViewData["Title"] = "Employee List";
+}
+
+<h2>Employees from QuickBooks</h2>
+
+@if (Model != null)
+{
+    <table class="table table-bordered">
+        <thead>
+            <tr>
+                <th>Display Name</th>
+                <th>Primary Email</th>
+                <th>Active</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var emp in Model)
+            {
+                <tr>
+                    <td>@emp.DisplayName</td>
+                    <td>@emp.PrimaryEmailAddr?.Address</td>
+                    <td>@emp.Active</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+else
+{
+    <p>No employees found.</p>
+}
+
