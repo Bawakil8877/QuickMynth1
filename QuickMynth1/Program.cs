@@ -54,6 +54,8 @@ builder.Services.AddHttpClient();
 builder.Services.AddScoped<OAuthService>();
 
 
+
+builder.Services.AddDistributedMemoryCache();
 builder.Services.AddSession(options =>
 {
     options.IdleTimeout = TimeSpan.FromMinutes(30);

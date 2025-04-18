@@ -1,9 +1,9 @@
 ﻿@model dynamic
 @{
-    ViewData["Title"] = "Employee List";
+    ViewData["Title"] = "Contractor List";
 }
 
-<h2>Employees from QuickBooks</h2>
+<h2>Contractors from QuickBooks</h2>
 
 <nav class="mb-3">
     <a asp-action="EmployeeList"
@@ -29,12 +29,12 @@
             </tr>
         </thead>
         <tbody>
-            @foreach (var emp in Model)
+            @foreach (var v in Model)
             {
                 <tr>
-                    <td>@emp.DisplayName</td>
-                    <td>@emp.PrimaryEmailAddr?.Address</td>
-                    <td>@emp.Active</td>
+                    <td>@v.DisplayName</td>
+                    <td>@v.PrimaryEmailAddr?.Address</td>
+                    <td>@v.Active</td>
                 </tr>
             }
         </tbody>
@@ -42,7 +42,5 @@
 }
 else
 {
-    <p>No employees found.</p>
+    <p>No contractors found.</p>
 }
-
-

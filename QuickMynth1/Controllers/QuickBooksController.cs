@@ -28,34 +28,47 @@ namespace QuickMynth1.Controllers
             if (string.IsNullOrEmpty(code) || string.IsNullOrEmpty(realmId))
                 return BadRequest("Missing code or realmId.");
 
+            // exchange code for token
             var tokenJson = await _oAuthService.ExchangeQuickBooksCodeForTokenAsync(code);
-            dynamic tokenData = JsonConvert.DeserializeObject(tokenJson);
+            dynamic tokenObj = JsonConvert.DeserializeObject(tokenJson);
+            string accessToken = tokenObj.access_token;
 
-            string accessToken = tokenData.access_token;
-            TempData["AccessToken"] = accessToken;
-            TempData["RealmId"] = realmId;
+            // ←–– save into Session
+            HttpContext.Session.SetString("QbAccessToken", accessToken);
+            HttpContext.Session.SetString("QbRealmId", realmId);
 
             return RedirectToAction("EmployeeList");
         }
 
+
         public async Task<IActionResult> EmployeeList()
         {
-            var accessToken = TempData["AccessToken"] as string;
-            var realmId = TempData["RealmId"] as string;
-
+            var accessToken = HttpContext.Session.GetString("QbAccessToken");
+            var realmId = HttpContext.Session.GetString("QbRealmId");
             if (string.IsNullOrEmpty(accessToken) || string.IsNullOrEmpty(realmId))
-            {
                 return RedirectToAction("Error");
-            }
 
             var employeesJson = await _oAuthService.GetEmployeesAsync(accessToken, realmId);
-
-            // Optional: Deserialize and pass to view
             dynamic data = JsonConvert.DeserializeObject(employeesJson);
             var employees = data.QueryResponse.Employee;
 
             return View(employees);
         }
+
+        public async Task<IActionResult> ContractorList()
+        {
+            var accessToken = HttpContext.Session.GetString("QbAccessToken");
+            var realmId = HttpContext.Session.GetString("QbRealmId");
+            if (string.IsNullOrEmpty(accessToken) || string.IsNullOrEmpty(realmId))
+                return RedirectToAction("Error");
+
+            var contractorsJson = await _oAuthService.GetContractorsAsync(accessToken, realmId);
+            dynamic data = JsonConvert.DeserializeObject(contractorsJson);
+            var contractors = data.QueryResponse.Vendor;
+
+            return View("ContractorList", contractors);
+        }
+
 
 
         // Step 3: Fetch QuickBooks data with the access token

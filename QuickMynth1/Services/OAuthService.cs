@@ -74,6 +74,23 @@ namespace QuickMynth1.Services
             return content; // You can deserialize this JSON later
         }
 
+
+        public async Task<string> GetContractorsAsync(string accessToken, string realmId)
+        {
+            var client = _clientFactory.CreateClient();
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+            client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+            // NOTE: “Vendor” is the table for contractors
+            string baseUrl = _config["QuickBooks:BaseUrl"];
+            string queryUrl = $"{baseUrl}/{realmId}/query?query=SELECT%20*%20FROM%20Vendor&minorversion=65";
+
+            var response = await client.GetAsync(queryUrl);
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadAsStringAsync();
+        }
+
+
     }
 
 }
