@@ -21,6 +21,8 @@ builder.Services.AddSingleton<GmailService>(sp =>
     var redirectUri = config["RedirectUri"];
     var applicationName = config["ApplicationName"];
 
+
+
     // Set up OAuth2 credentials
     var credentials = GoogleCredential.FromFile("path-to-your-credentials-file.json")
         .CreateScoped(GmailService.Scope.GmailSend);
@@ -52,6 +54,10 @@ builder.Services.Configure<GoogleOAuthSettings>(builder.Configuration.GetSection
 builder.Services.AddSingleton<GoogleOAuthService>();
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<OAuthService>();
+builder.Services.AddHttpContextAccessor(); // if needed
+builder.Services.AddScoped<GustoService>();
+builder.Services.AddScoped<FinchService>();
+
 
 
 

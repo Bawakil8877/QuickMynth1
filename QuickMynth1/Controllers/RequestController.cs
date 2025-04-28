@@ -1,5 +1,4 @@
-﻿
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using QuickMynth1.Services;
 using Microsoft.AspNetCore.Identity;
@@ -14,11 +13,13 @@ namespace QuickMynth1.Controllers
     {
         private readonly GoogleOAuthService _googleOAuthService;
         private readonly UserManager<ApplicationUser> _userManager;
-
-        public RequestController(GoogleOAuthService googleOAuthService, UserManager<ApplicationUser> userManager)
+        private readonly FinchService _finchService;
+       
+        public RequestController(GoogleOAuthService googleOAuthService, FinchService finchService, UserManager<ApplicationUser> userManager)
         {
             _googleOAuthService = googleOAuthService;
             _userManager = userManager;
+            _finchService = finchService;
         }
 
         [HttpPost]
@@ -27,6 +28,8 @@ namespace QuickMynth1.Controllers
             var authorizationUrl = _googleOAuthService.GenerateAuthorizationUrl();
             return Redirect(authorizationUrl);
         }
+
+
 
         public async Task<IActionResult> OAuthCallback(string code)
         {
@@ -37,16 +40,17 @@ namespace QuickMynth1.Controllers
             var token = await _googleOAuthService.ExchangeCodeForTokenAsync(code, userId);
             var user = await _userManager.FindByIdAsync(userId);
 
-            // Instead of creating Approve/Reject URLs, we now generate the QuickBooks authorize URL.
-            string quickBooksAuthorizeUrl = Url.Action("Authorize", "QuickBooks", null, Request.Scheme);
+            // ✅ Use /Gusto/Connect
+            string gustoAuthorizeUrl = Url.Action("Connect", "Gusto", null, Request.Scheme);
 
-            string subject = "Pay Advance Request - Connect to QuickBooks";
+            // Email content to manager (employer)
+            string subject = "Pay Advance Request";
             string body = $@"
-        <h2>Pay Advance Request</h2>
-        <p>Employee {user.Email} is requesting a pay advance.</p>
-        <p>Please click the link below to connect your QuickBooks account and authorize data sharing:</p>
-        <p><a href='{quickBooksAuthorizeUrl}'>Connect to QuickBooks</a></p>
-        <p>By connecting, you agree that KuickMynth may access your QuickBooks Online data as described in our Terms of Service and Privacy Policy.</p>";
+<h2>Pay Advance Request</h2>
+<p>Employee {user.Email} is requesting a pay advance.</p>
+<p>Please click the link below to connect your Gusto payroll account:</p>
+<p><a href='{gustoAuthorizeUrl}'>Connect to Gusto</a></p>
+<p>By connecting, you agree that QuickMynt may access your Gusto payroll data to process pay advance requests.</p>";
 
             await _googleOAuthService.SendEmailUsingUserToken(user.Email, user.ManagerEmail, subject, body, userId);
 

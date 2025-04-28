@@ -9,5 +9,7 @@ namespace QuickMynth1.Data
         public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options) : base(options) { }
 
         public DbSet<QuickMynth> QuickMynth { get; set; }
+        public DbSet<GustoUserToken> GustoTokens { get; set; }
+
     }
 }

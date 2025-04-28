@@ -12,8 +12,8 @@ using QuickMynth1.Data;
 namespace QuickMynth1.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20250410135149_wrapping")]
-    partial class wrapping
+    [Migration("20250424233636_AddRoleSpecificFields")]
+    partial class AddRoleSpecificFields
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -253,6 +253,37 @@ namespace QuickMynth1.Migrations
                         .HasFilter("[NormalizedUserName] IS NOT NULL");
 
                     b.ToTable("AspNetUsers", (string)null);
+                });
+
+            modelBuilder.Entity("QuickMynth1.Models.GustoUserToken", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("AccessToken")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("ExpiresIn")
+                        .HasColumnType("int");
+
+                    b.Property<string>("RefreshToken")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("GustoTokens");
                 });
 
             modelBuilder.Entity("QuickMynth1.Models.QuickMynth", b =>

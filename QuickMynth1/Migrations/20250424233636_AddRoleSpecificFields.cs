@@ -59,6 +59,23 @@ namespace QuickMynth1.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "GustoTokens",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "int", nullable: false)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    UserId = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    AccessToken = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    RefreshToken = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    ExpiresIn = table.Column<int>(type: "int", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "datetime2", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_GustoTokens", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "QuickMynth",
                 columns: table => new
                 {
@@ -242,6 +259,9 @@ namespace QuickMynth1.Migrations
 
             migrationBuilder.DropTable(
                 name: "AspNetUserTokens");
+
+            migrationBuilder.DropTable(
+                name: "GustoTokens");
 
             migrationBuilder.DropTable(
                 name: "QuickMynth");
