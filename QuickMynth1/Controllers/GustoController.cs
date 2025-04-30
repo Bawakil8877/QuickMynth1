@@ -14,10 +14,12 @@ namespace QuickMynth1.Controllers
     {
         private readonly GustoService _svc;
         private readonly ApplicationDbContext _db;
-        public GustoController(GustoService svc, ApplicationDbContext db)
+        private readonly ILogger<GustoController> _logger;
+        public GustoController(GustoService svc, ApplicationDbContext db, ILogger<GustoController> logger )
         {
             _svc = svc;
             _db = db;
+            _logger = logger;
         }
 
         [HttpGet]
@@ -49,69 +51,53 @@ namespace QuickMynth1.Controllers
                                  .FirstOrDefaultAsync(t => t.UserId == uid)
                        ?? throw new Exception("Not connected to Gusto.");
 
-            // Ensure we have exactly one post-tax benefit created
-            await _svc.EnsurePostTaxBenefitAsync(token.AccessToken, token.CompanyId);
+            // Ensure one benefit exists, and get its UUID
+            var benefitUuid = await _svc.EnsurePostTaxBenefitAsync(token.AccessToken, token.CompanyId);
 
-            // Fetch and dedupe benefits
-            var all = await _svc.GetCompanyBenefitsAsync(token.AccessToken, token.CompanyId);
-            var postTaxItems = all
-              .Where(b => b.Type == "post_tax")
-              .GroupBy(b => b.Name)
-              .Select(g => g.First())
-              .Select(b => new SelectListItem { Text = b.Name, Value = b.Uuid })
-              .ToList();
+            // Fetch that benefit’s name
+            var benefits = await _svc.GetCompanyBenefitsAsync(token.AccessToken, token.CompanyId);
+            var bene = benefits.First(b => b.Uuid == benefitUuid);
 
             var vm = new DeductionViewModel
             {
                 EmployeeEmail = User.FindFirstValue(ClaimTypes.Email)!,
-                AvailableBenefits = postTaxItems
+                SelectedBenefitUuid = benefitUuid,
+                BenefitName = bene.Name
             };
-
-            // Pre-select the only available benefit
-            if (postTaxItems.Count == 1)
-                vm.SelectedBenefitUuid = postTaxItems[0].Value;
-
             return View(vm);
         }
+
 
 
         // POST: /Gusto/Deduction
         [HttpPost]
         [ValidateAntiForgeryToken]
+
         public async Task<IActionResult> Deduction(DeductionViewModel m)
         {
+            _logger.LogInformation(
+       "POST /Gusto/Deduction vm.SelectedBenefitUuid='{Uuid}', vm.BenefitName='{Name}', vm.DeductionAmount={Amount}",
+       m.SelectedBenefitUuid, m.BenefitName, m.DeductionAmount);
+            if (!ModelState.IsValid)
+                return View(m);
+
             var uid = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
             var token = await _db.GustoTokens
                                  .FirstOrDefaultAsync(t => t.UserId == uid)
                        ?? throw new Exception("Not connected to Gusto.");
 
-            // Re‐populate WITHOUT calling EnsurePostTaxBenefitAsync here
-            var all = await _svc.GetCompanyBenefitsAsync(token.AccessToken, token.CompanyId);
-            m.AvailableBenefits = all
-              .Where(b => b.Type == "post_tax")
-              .GroupBy(b => b.Name)
-              .Select(g => g.First())
-              .Select(b => new SelectListItem { Text = b.Name, Value = b.Uuid })
-              .ToList();
-
-            // If only one benefit, bind it and clear its ModelState entry
-            if (m.AvailableBenefits.Count == 1)
-            {
-                m.SelectedBenefitUuid = m.AvailableBenefits[0].Value;
-                ModelState.Remove(nameof(DeductionViewModel.SelectedBenefitUuid));
-            }
-
-            if (!ModelState.IsValid)
-                return View(m);
-
             try
             {
                 var empId = await _svc.FindEmployeeIdByEmailAsync(
-                                token.AccessToken, token.CompanyId, m.EmployeeEmail);
+                                token.AccessToken,
+                                token.CompanyId,
+                                m.EmployeeEmail);
 
                 await _svc.CreateEmployeeBenefitAsync(
-                                token.AccessToken, empId,
-                                m.SelectedBenefitUuid!, m.DeductionAmount!.Value);
+                                token.AccessToken,
+                                empId,
+                                m.SelectedBenefitUuid,
+                                m.DeductionAmount!.Value);
 
                 TempData["Success"] = "Deduction created successfully!";
                 return RedirectToAction(nameof(Deduction));

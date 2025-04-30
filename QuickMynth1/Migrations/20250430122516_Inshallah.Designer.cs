@@ -12,7 +12,7 @@ using QuickMynth1.Data;
 namespace QuickMynth1.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20250430113525_Inshallah")]
+    [Migration("20250430122516_Inshallah")]
     partial class Inshallah
     {
         /// <inheritdoc />

@@ -15,46 +15,30 @@
     <div class="alert alert-success">@ok</div>
 }
 
+
 <form asp-action="Deduction" method="post">
     @Html.AntiForgeryToken()
-    <div asp-validation-summary="All" class="text-danger"></div>
 
-    <input type="hidden" asp-for="EmployeeEmail" />
+    <input asp-for="EmployeeEmail" type="hidden" />
+
+    @* This hidden input will guarantee the UUID is bound *@
+    <input asp-for="SelectedBenefitUuid" type="hidden" />
 
     <div class="form-group">
-        <label asp-for="SelectedBenefitUuid">Benefit</label>
-
-        @* If there’s exactly one option, render it as a hidden field + plain text *@
-        @if (Model.AvailableBenefits?.Count == 1)
-        {
-            <input type="hidden"
-                   name="SelectedBenefitUuid"
-                   value="@Model.AvailableBenefits[0].Value" />
-            <p class="form-control-plaintext">
-                @Model.AvailableBenefits[0].Text
-            </p>
-        }
-        else
-        {
-            @* Otherwise render the required dropdown *@
-            <select asp-for="SelectedBenefitUuid"
-                    class="form-control"
-                    asp-items="Model.AvailableBenefits">
-                <option value="">-- choose --</option>
-            </select>
-        }
-
+        <label>Benefit</label>
+        <p class="form-control-plaintext">@Model.BenefitName</p>
         <span asp-validation-for="SelectedBenefitUuid" class="text-danger"></span>
     </div>
 
     <div class="form-group">
-        <label asp-for="DeductionAmount">Amount</label>
+        <label asp-for="DeductionAmount"></label>
         <input asp-for="DeductionAmount" class="form-control" />
         <span asp-validation-for="DeductionAmount" class="text-danger"></span>
     </div>
 
     <button type="submit" class="btn btn-primary">Create Deduction</button>
 </form>
+
 
 @section Scripts {
     @{
