@@ -5,16 +5,12 @@ namespace QuickMynth1.Models
 {
     public class CompanyBenefit
     {
-        [JsonPropertyName("uuid")]
-        public string Uuid { get; set; } = "";
+        public string Uuid { get; set; }
+        public string Name { get; set; }
+        public string Type { get; set; }  // "pre_tax", "post_tax", etc.
+        [JsonPropertyName("deduction_type")]
+        public string? DeductionType { get; set; }
 
-        [JsonPropertyName("name")]
-        public string Name { get; set; } = "";
-
-        [JsonPropertyName("post_tax")]
-        public bool PostTax { get; set; }
-
-        [JsonPropertyName("type")]
-        public string Type { get; set; } = "";
     }
+
 }

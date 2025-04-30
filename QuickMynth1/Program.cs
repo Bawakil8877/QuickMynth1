@@ -57,6 +57,8 @@ builder.Services.AddScoped<OAuthService>();
 builder.Services.AddHttpContextAccessor(); // if needed
 builder.Services.AddScoped<GustoService>();
 builder.Services.AddScoped<FinchService>();
+builder.Services.AddHttpClient<GustoService>();
+
 
 
 

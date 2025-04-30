@@ -1,24 +1,21 @@
 ﻿using System.ComponentModel.DataAnnotations;
-using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Rendering;
 
 namespace QuickMynth1.Models.ViewModels
 {
     public class DeductionViewModel
     {
-        [HiddenInput(DisplayValue = false)]
+        [Required, EmailAddress]
         public string EmployeeEmail { get; set; } = "";
 
         [Required]
         public string SelectedBenefitUuid { get; set; } = "";
 
-        // New: the benefit’s display name
+        // just to show the name on the form
         public string BenefitName { get; set; } = "";
 
-        [Required(ErrorMessage = "Please enter an amount.")]
-        [Range(0.01, double.MaxValue, ErrorMessage = "Amount must be greater than zero.")]
-        [Display(Name = "Amount")]
+        [Required]
+        [Display(Name = "Deduction Amount")]
+        [Range(0.01, double.MaxValue, ErrorMessage = "Please enter a positive amount")]
         public decimal? DeductionAmount { get; set; }
     }
-
 }

@@ -12,8 +12,8 @@ using QuickMynth1.Data;
 namespace QuickMynth1.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20250430122516_Inshallah")]
-    partial class Inshallah
+    [Migration("20250430214014_AddRoleSpecificField")]
+    partial class AddRoleSpecificField
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)

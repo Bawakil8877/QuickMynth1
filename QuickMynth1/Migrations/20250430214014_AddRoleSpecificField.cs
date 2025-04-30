@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace QuickMynth1.Migrations
 {
     /// <inheritdoc />
-    public partial class Inshallah : Migration
+    public partial class AddRoleSpecificField : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
