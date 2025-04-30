@@ -1,10 +1,19 @@
-﻿namespace QuickMynth1.Models
+﻿// Models/GustoTokenResponse.cs
+using System.Text.Json.Serialization;
+
+namespace QuickMynth1.Models
 {
     public class GustoTokenResponse
     {
-        public string access_token { get; set; }
-        public string refresh_token { get; set; }
-        public int expires_in { get; set; }
+        [JsonPropertyName("access_token")]
+        public string AccessToken { get; set; } = "";
+
+        [JsonPropertyName("refresh_token")]
+        public string RefreshToken { get; set; } = "";
+
+        [JsonPropertyName("expires_in")]
+        public int ExpiresIn { get; set; }
     }
 
+   
 }
