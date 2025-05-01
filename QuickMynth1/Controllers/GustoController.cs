@@ -30,6 +30,7 @@ namespace QuickMynth1.Controllers
             => Redirect(_svc.GetAuthorizationUrl());
 
         [HttpGet]
+        [HttpGet]
         public async Task<IActionResult> Callback(string code, string error)
         {
             if (!string.IsNullOrEmpty(error))
@@ -41,9 +42,19 @@ namespace QuickMynth1.Controllers
             var tokenJson = await _svc.ExchangeCodeForTokenAsync(code);
             await _svc.SaveTokenAsync(uid, tokenJson);
 
-            TempData["Success"] = "Connected to Gusto!";
+            // — Fetch the saved token entity from the database
+            var tokEntity = await _db.GustoTokens
+                                     .FirstOrDefaultAsync(t => t.UserId == uid);
+            if (tokEntity == null)
+                throw new Exception("Saved Gusto token not found in database.");
+
+            // — Use its AccessToken to log supported benefits
+            await _svc.LogSupportedBenefitsAsync(tokEntity.AccessToken);
+
+            TempData["Success"] = "Connected to Gusto!  Check your console/output for the supported-benefits JSON.";
             return RedirectToAction(nameof(Deduction));
         }
+
 
         [HttpGet]
         public async Task<IActionResult> Deduction()

@@ -4,6 +4,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.VisualStudio.Web.CodeGenerators.Mvc.Templates.Blazor;
 using QuickMynth1.Data;
 using QuickMynth1.Models;
 
@@ -20,12 +21,13 @@ namespace QuickMynth1.Services
         private readonly HttpClient _client;
         private readonly HttpClient _httpClient;
         private readonly IConfiguration _configuration;
-
+        private readonly ILogger<GustoService> _logger;
         public GustoService(
             IConfiguration config,
             IHttpClientFactory httpClientFactory,
             HttpClient httpClient,
             IConfiguration configuration,
+            ILogger<GustoService> logger,
             ApplicationDbContext context)
         {
             _config = config;
@@ -34,6 +36,7 @@ namespace QuickMynth1.Services
             _configuration = configuration;
             _db = context;
             _version = _config["GustoOAuth:ApiVersion"] ?? "2024-04-01";
+            _logger = logger;
         }
 
         public string GetAuthorizationUrl()
@@ -148,34 +151,43 @@ namespace QuickMynth1.Services
 
         public async Task<string> CreateDefaultCompanyBenefitAsync(string token, string companyId)
         {
-            var client = Client(token);
+            const int PostTaxBenefitTypeId = 998;  // from your logs
 
-            var wrapper = new
+            // flat payload as required by the demo endpoint
+            var payload = new
             {
-                company_benefit = new
-                {
-                    benefit_type = 1,
-                    name = "QuickMynt Advance Fee",
-                    description = "Earned Wage Access Service Fee",
-                    pretax = false,
-                    posttax = true
-                }
+                active = true,
+                benefit_type = PostTaxBenefitTypeId,
+                description = "Post-tax deduction for QuickMynt earned-wage advances",
+                pretax = false,
+                posttax = true
             };
-            var payload = JsonSerializer.Serialize(wrapper);
-            var resp = await client.PostAsync(
-                $"{_base}/v1/companies/{companyId}/company_benefits",
-                new StringContent(payload, Encoding.UTF8, "application/json")
-            );
+            var body = new StringContent(
+                            JsonSerializer.Serialize(payload),
+                            Encoding.UTF8,
+                            "application/json"
+                         );
+            var client = Client(token);
+            var url = $"{_base}/v1/companies/{companyId}/company_benefits";
 
+            var resp = await client.PostAsync(url, body);
+            var text = await resp.Content.ReadAsStringAsync();
             if (!resp.IsSuccessStatusCode)
-            {
-                var err = await resp.Content.ReadAsStringAsync();
-                throw new Exception($"create company_benefit failed: {err}");
-            }
+                throw new Exception($"create company_benefit failed: {text}");
 
-            using var doc = JsonDocument.Parse(await resp.Content.ReadAsStringAsync());
-            var cb = doc.RootElement.GetProperty("company_benefit");
-            return cb.GetProperty("uuid").GetString()!;
+            using var doc = JsonDocument.Parse(text);
+            var root = doc.RootElement;
+
+            // if the API wrapped it under "company_benefit", drill in; otherwise stay at root
+            if (root.TryGetProperty("company_benefit", out var wrapped))
+                root = wrapped;
+
+            // now we expect "uuid" to live here
+            if (root.TryGetProperty("uuid", out var u))
+                return u.GetString()!;
+
+            // otherwise, include the raw text in the exception for debugging
+            throw new Exception($"Couldn’t find uuid in response: {text}");
         }
 
 
@@ -200,68 +212,53 @@ namespace QuickMynth1.Services
         }
 
         public async Task CreateEmployeeBenefitAsync(
-    string token, string employeeId, string benefitUuid, decimal amount)
+     string token,
+     string employeeId,
+     string benefitUuid,
+     decimal amount)
         {
             var client = Client(token);
 
+            // ── NESTED WRAPPER with the *contribution* field ────────────────
             var payload = new
             {
                 employee_benefit = new
                 {
                     company_benefit_uuid = benefitUuid,
                     company_contribution_amount = 0m,
-                    employee_deduction_amount = amount
+                    employee_contribution_amount = amount,
+                    active = true
                 }
             };
+            // ────────────────────────────────────────────────────────────────
+
             var json = JsonSerializer.Serialize(payload);
+            Console.WriteLine($">>> POST /employee_benefits payload: {json}");
+
             var resp = await client.PostAsync(
                 $"{_base}/v1/employees/{employeeId}/employee_benefits",
                 new StringContent(json, Encoding.UTF8, "application/json")
             );
+            var text = await resp.Content.ReadAsStringAsync();
+            Console.WriteLine($">>> Response {resp.StatusCode}: {text}");
 
             if (!resp.IsSuccessStatusCode)
-            {
-                var error = await resp.Content.ReadAsStringAsync();
-                throw new Exception($"employee_benefits failed: {error}");
-            }
+                throw new Exception($"employee_benefits failed: {text}");
         }
 
 
         public async Task<string> EnsurePostTaxBenefitAsync(string token, string companyId)
         {
-            _client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
-
             var all = await GetCompanyBenefitsAsync(token, companyId);
-
             var existing = all.FirstOrDefault(b =>
                 b.Type == "post_tax" && b.Name == "QuickMynt Deduction");
-
-            if (existing != null)
-                return existing.Uuid;
-
-            var content = new
-            {
-                name = "QuickMynt Deduction",
-                deduction_type = "post_tax",
-                benefit_type = "other", // required
-                company_id = companyId
-            };
-
-            var json = JsonSerializer.Serialize(content);
-            var body = new StringContent(json, Encoding.UTF8, "application/json");
-
-            var create = await _client.PostAsync("https://api.gusto.com/v1/company_benefits", body);
-
-            if (!create.IsSuccessStatusCode)
-            {
-                var err = await create.Content.ReadAsStringAsync();
-                throw new Exception($"Gusto POST failed: {create.StatusCode} – {err}");
-            }
-
-            using var doc = JsonDocument.Parse(await create.Content.ReadAsStringAsync());
-            var cb = doc.RootElement.GetProperty("company_benefit");
-            return cb.GetProperty("uuid").GetString()!;
+            return existing != null
+                ? existing.Uuid
+                : await CreateDefaultCompanyBenefitAsync(token, companyId);
         }
+
+
+
 
 
         // 2) Find the employee ID by email
@@ -293,5 +290,48 @@ namespace QuickMynth1.Services
                 throw new Exception($"employee_benefits failed: {err}");
             }
         }
+
+
+
+        public async Task<int> FindDeductionBenefitTypeAsync(string token)
+        {
+            var client = Client(token);
+            var resp = await client.GetAsync($"{_base}/v1/benefits");
+            resp.EnsureSuccessStatusCode();
+
+            var list = JsonSerializer.Deserialize<List<SupportedBenefit>>(
+                await resp.Content.ReadAsStringAsync(),
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+            )!;
+
+            // 1) try to pick a true post-tax benefit
+            var postTax = list.FirstOrDefault(b =>
+                string.Equals(b.DeductionType, "post_tax", StringComparison.OrdinalIgnoreCase)
+            );
+            if (postTax != null)
+                return postTax.Id;
+
+            // 2) else pick the “Other” benefit if it exists
+            var other = list.FirstOrDefault(b =>
+                string.Equals(b.Name, "Other", StringComparison.OrdinalIgnoreCase)
+            );
+            if (other != null)
+                return other.Id;
+
+            // 3) final fallback: just take the first ID in the list
+            return list[0].Id;
+        }
+
+        public async Task LogSupportedBenefitsAsync(string token)
+        {
+            var client = Client(token);
+            var resp = await client.GetAsync($"{_base}/v1/benefits");
+            resp.EnsureSuccessStatusCode();
+
+            var json = await resp.Content.ReadAsStringAsync();
+            _logger.LogInformation("=== Gusto Supported Benefits ===\n{json}", json);
+        }
+
+
     }
 }
