@@ -6,6 +6,7 @@ using QuickMynth1.Models.ViewModels;
 using QuickMynth1.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Mvc.Rendering;
+using NuGet.Common;
 
 namespace QuickMynth1.Controllers
 {
@@ -88,27 +89,47 @@ namespace QuickMynth1.Controllers
             if (!ModelState.IsValid)
                 return View(m);
 
-            var uid = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-            var token = await _db.GustoTokens
-                                 .FirstOrDefaultAsync(t => t.UserId == uid)
-                        ?? throw new Exception("Not connected to Gusto.");
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+            var tok = await _db.GustoTokens
+                                  .FirstOrDefaultAsync(t => t.UserId == userId)
+                       ?? throw new Exception("Not connected to Gusto.");
 
-            // find the employee record
-            var empId = await _svc.FindEmployeeIdByEmailAsync(
-                            token.AccessToken,
-                            token.CompanyId,
-                            m.EmployeeEmail);
+            var accessToken = tok.AccessToken;
+            var companyId = tok.CompanyId;
 
-            // create the deduction
-            await _svc.CreateEmployeeBenefitAsync(
-                            token.AccessToken,
-                            empId,
-                            m.SelectedBenefitUuid,
-                            m.DeductionAmount!.Value);
+            // 1) Resolve the Gusto employee ID
+            var employeeId = await _svc.FindEmployeeIdByEmailAsync(
+                                 accessToken,
+                                 companyId,
+                                 m.EmployeeEmail);
+
+            // 2) Fetch ALL company benefits
+            var benefits = await _svc.GetCompanyBenefitsAsync(accessToken, companyId);
+
+            // Debug: log the set of UUIDs we got back
+            _logger.LogDebug("Company benefits returned: {UUIDs}",
+                benefits.Select(b => b.Uuid).ToArray());
+
+            // 3) Find the one the form posted
+            var benefit = benefits
+                            .FirstOrDefault(b => b.Uuid == m.SelectedBenefitUuid);
+
+            if (benefit is null)
+                throw new Exception(
+                    $"Selected benefit '{m.SelectedBenefitUuid}' not found. " +
+                    $"Returned UUIDs: {string.Join(", ", benefits.Select(b => b.Uuid))}");
+
+            // 4) Call the service with the exact payload shape the demo API accepts
+            await _svc.CreateEmployeeDeductionAsync(
+                accessToken,
+                employeeId,
+                benefit.Uuid,           // company_benefit_uuid
+                m.DeductionAmount!.Value);
 
             TempData["Success"] = "Deduction created successfully!";
             return RedirectToAction(nameof(Deduction));
         }
+
 
     }
 }

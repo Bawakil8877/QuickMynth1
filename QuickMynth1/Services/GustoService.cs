@@ -134,12 +134,13 @@ namespace QuickMynth1.Services
             var resp = await client.GetAsync($"{_base}/v1/companies/{companyId}/company_benefits");
             var body = await resp.Content.ReadAsStringAsync();
 
+            Console.WriteLine($">>> RAW company_benefits response: {body}");   // ← log it
+
             if (resp.StatusCode == HttpStatusCode.NotFound || resp.StatusCode == HttpStatusCode.Unauthorized)
                 return new List<CompanyBenefit>();
 
             resp.EnsureSuccessStatusCode();
 
-            // Parse plain JSON array directly
             var list = JsonSerializer.Deserialize<List<CompanyBenefit>>(body, new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true
@@ -263,34 +264,39 @@ namespace QuickMynth1.Services
 
         // 2) Find the employee ID by email
         public async Task CreateEmployeeDeductionAsync(
-    string token,
-    string employeeId,
-    string benefitUuid,
-    decimal amount)
+     string token,
+     string employeeId,
+     string companyBenefitUuid,
+     decimal amount)
         {
             var client = Client(token);
-            var body = new
+
+            var payload = new
             {
                 employee_benefit = new
                 {
-                    company_benefit_uuid = benefitUuid,
-                    company_contribution_amount = 0m,
-                    employee_deduction_amount = amount
+                    company_benefit_uuid = companyBenefitUuid,
+                    pretax = false,
+                    posttax = true,
+                    employee_deduction_amount = amount,
+                    active = true
                 }
             };
 
+            var json = JsonSerializer.Serialize(payload);
+            Console.WriteLine($">>> POST /employee_benefits payload: {json}");
+
             var resp = await client.PostAsync(
                 $"{_base}/v1/employees/{employeeId}/employee_benefits",
-                new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json")
+                new StringContent(json, Encoding.UTF8, "application/json")
             );
 
-            if (!resp.IsSuccessStatusCode)
-            {
-                var err = await resp.Content.ReadAsStringAsync();
-                throw new Exception($"employee_benefits failed: {err}");
-            }
-        }
+            var text = await resp.Content.ReadAsStringAsync();
+            Console.WriteLine($">>> Response {resp.StatusCode}: {text}");
 
+            if (!resp.IsSuccessStatusCode)
+                throw new Exception($"employee_benefits failed: {text}");
+        }
 
 
         public async Task<int> FindDeductionBenefitTypeAsync(string token)
