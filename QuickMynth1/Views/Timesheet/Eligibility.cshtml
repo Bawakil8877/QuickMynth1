@@ -1,0 +1,19 @@
+﻿@model IEnumerable<QuickMynth1.Models.ViewModels.EligibilityViewModel>
+<h2>Eligibility Report</h2>
+<table class="table table-striped">
+    <thead>
+        <tr><th>Employee</th><th>Total Hours</th><th>Rate</th><th>Earned</th></tr>
+    </thead>
+    <tbody>
+        @foreach (var e in Model)
+        {
+            <tr>
+                <td>@e.EmployeeId</td>
+                <td>@e.TotalHours</td>
+                <td>@e.HourlyRate</td>
+                <td>@e.EarnedToDate</td>
+            </tr>
+        }
+    </tbody>
+</table>
+

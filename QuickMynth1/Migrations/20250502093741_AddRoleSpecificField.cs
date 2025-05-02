@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace QuickMynth1.Migrations
 {
     /// <inheritdoc />
-    public partial class Zaiyiinshallah : Migration
+    public partial class AddRoleSpecificField : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -95,6 +95,24 @@ namespace QuickMynth1.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_QuickMynth", x => x.Id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "TimesheetEntries",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "int", nullable: false)
+                        .Annotation("SqlServer:Identity", "1, 1"),
+                    ExternalId = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    EmployeeId = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    EmployeeName = table.Column<string>(type: "nvarchar(max)", nullable: false),
+                    Date = table.Column<DateTime>(type: "datetime2", nullable: false),
+                    HoursWorked = table.Column<decimal>(type: "decimal(18,2)", nullable: false),
+                    Project = table.Column<string>(type: "nvarchar(max)", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_TimesheetEntries", x => x.Id);
                 });
 
             migrationBuilder.CreateTable(
@@ -266,6 +284,9 @@ namespace QuickMynth1.Migrations
 
             migrationBuilder.DropTable(
                 name: "QuickMynth");
+
+            migrationBuilder.DropTable(
+                name: "TimesheetEntries");
 
             migrationBuilder.DropTable(
                 name: "AspNetRoles");

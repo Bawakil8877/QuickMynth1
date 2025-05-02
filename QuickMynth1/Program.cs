@@ -58,12 +58,12 @@ builder.Services.AddHttpContextAccessor(); // if needed
 builder.Services.AddScoped<GustoService>();
 builder.Services.AddScoped<FinchService>();
 builder.Services.AddHttpClient<GustoService>();
-
+builder.Services.AddScoped<TimesheetService>();
 builder.Services
     .AddHttpClient("Gusto")
     .AddHttpMessageHandler(() => new LoggingHandler(logger: builder.Services
-        .BuildServiceProvider()
-        .GetRequiredService<ILogger<LoggingHandler>>()));
+    .BuildServiceProvider()
+    .GetRequiredService<ILogger<LoggingHandler>>()));
 
 
 

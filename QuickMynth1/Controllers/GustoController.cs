@@ -27,10 +27,8 @@ namespace QuickMynth1.Controllers
         }
 
         [HttpGet]
-        public IActionResult Connect()
-            => Redirect(_svc.GetAuthorizationUrl());
+        public IActionResult Connect() => Redirect(_svc.GetAuthorizationUrl());
 
-        [HttpGet]
         [HttpGet]
         public async Task<IActionResult> Callback(string code, string error)
         {
@@ -43,18 +41,19 @@ namespace QuickMynth1.Controllers
             var tokenJson = await _svc.ExchangeCodeForTokenAsync(code);
             await _svc.SaveTokenAsync(uid, tokenJson);
 
-            // — Fetch the saved token entity from the database
             var tokEntity = await _db.GustoTokens
                                      .FirstOrDefaultAsync(t => t.UserId == uid);
             if (tokEntity == null)
-                throw new Exception("Saved Gusto token not found in database.");
+                throw new Exception("Saved Gusto token not found.");
 
-            // — Use its AccessToken to log supported benefits
-            await _svc.LogSupportedBenefitsAsync(tokEntity.AccessToken);
+            // Register webhook once
+            var callbackUrl = "https://your-app.com/api/gusto/webhook";
+            await _svc.RegisterWebhookAsync(tokEntity.AccessToken, tokEntity.CompanyId, callbackUrl);
 
-            TempData["Success"] = "Connected to Gusto!  Check your console/output for the supported-benefits JSON.";
-            return RedirectToAction(nameof(Deduction));
+            TempData["Success"] = "Connected to Gusto and webhook registered.";
+            return RedirectToAction("Index", "Home");
         }
+
 
 
         [HttpGet]

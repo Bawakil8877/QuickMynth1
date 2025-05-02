@@ -46,7 +46,7 @@ namespace QuickMynth1.Services
             var scopes = Uri.EscapeDataString(_config["GustoOAuth:Scopes"]);
             return $"{_base}/oauth/authorize?client_id={client}&redirect_uri={redirect}&response_type=code&scope={scopes}";
         }
-
+      
         private HttpClient Client(string token)
         {
             var c = _http.CreateClient();
@@ -336,6 +336,38 @@ namespace QuickMynth1.Services
 
             var json = await resp.Content.ReadAsStringAsync();
             _logger.LogInformation("=== Gusto Supported Benefits ===\n{json}", json);
+        }
+
+        public async Task<decimal> GetHourlyRateAsync(string token, string companyId, string employeeId)
+        {
+            var client = Client(token);
+            var url = $"{_base}/v1/companies/{companyId}/employees/{employeeId}/compensation";
+            var resp = await client.GetAsync(url);
+            resp.EnsureSuccessStatusCode();
+            var json = await resp.Content.ReadAsStringAsync();
+            var comp = JsonSerializer.Deserialize<CompensationResponse>(json, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            })!;
+            return comp.HourlyRate;
+        }
+
+        public async Task RegisterWebhookAsync(string token, string companyId, string callbackUrl)
+        {
+            var client = Client(token);
+            var payload = new
+            {
+                event_type = "TimeEntryCreated",
+                company_uuid = companyId,
+                target_url = callbackUrl
+            };
+            var content = new StringContent(
+                JsonSerializer.Serialize(payload),
+                Encoding.UTF8,
+                "application/json");
+
+            var resp = await client.PostAsync($"{_base}/v1/webhooks", content);
+            resp.EnsureSuccessStatusCode();
         }
 
 
