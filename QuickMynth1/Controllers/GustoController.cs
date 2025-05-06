@@ -17,41 +17,45 @@ namespace QuickMynth1.Controllers
         private readonly ApplicationDbContext _db;
         private readonly ILogger<GustoController> _logger;
         private readonly HttpClient _client;
+        private readonly GustoService _gustoService;
 
-        public GustoController(GustoService svc, ApplicationDbContext db, ILogger<GustoController> logger, HttpClient client)
+        public GustoController(GustoService svc, ApplicationDbContext db, ILogger<GustoController> logger, HttpClient client, GustoService gustoService)
         {
             _svc = svc;
             _db = db;
             _logger = logger;
             _client = client;
+            _gustoService = gustoService;
         }
 
         [HttpGet]
-        public IActionResult Connect() => Redirect(_svc.GetAuthorizationUrl());
+        public IActionResult Connect()
+        {
+            var authorizationUrl = _gustoService.GetAuthorizationUrl();
+            return Redirect(authorizationUrl);
+        }
 
         [HttpGet]
         public async Task<IActionResult> Callback(string code, string error)
         {
             if (!string.IsNullOrEmpty(error))
                 return Content($"OAuth Error: {error}");
+
             if (string.IsNullOrEmpty(code))
-                return Content("Missing code.");
+                return Content("Missing Authorization Code.");
 
-            var uid = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-            var tokenJson = await _svc.ExchangeCodeForTokenAsync(code);
-            await _svc.SaveTokenAsync(uid, tokenJson);
+            try
+            {
+                var tokenJson = await _gustoService.ExchangeCodeForTokenAsync(code);
+                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+                await _gustoService.SaveTokenAsync(userId, tokenJson);
 
-            var tokEntity = await _db.GustoTokens
-                                     .FirstOrDefaultAsync(t => t.UserId == uid);
-            if (tokEntity == null)
-                throw new Exception("Saved Gusto token not found.");
-
-            // Register webhook once
-            var callbackUrl = "https://your-app.com/api/gusto/webhook";
-            await _svc.RegisterWebhookAsync(tokEntity.AccessToken, tokEntity.CompanyId, callbackUrl);
-
-            TempData["Success"] = "Connected to Gusto and webhook registered.";
-            return RedirectToAction("Index", "Home");
+                return Content("Gusto authorization successful! Token saved.");
+            }
+            catch (Exception ex)
+            {
+                return Content($"Error during Gusto OAuth: {ex.Message}");
+            }
         }
 
 
@@ -81,6 +85,7 @@ namespace QuickMynth1.Controllers
         }
 
         // POST: /Gusto/Deduction
+        // Controllers/GustoController.cs (only the POST action shown)
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Deduction(DeductionViewModel m)
@@ -89,40 +94,24 @@ namespace QuickMynth1.Controllers
                 return View(m);
 
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-            var tok = await _db.GustoTokens
-                                  .FirstOrDefaultAsync(t => t.UserId == userId)
-                       ?? throw new Exception("Not connected to Gusto.");
+            var tok = await _db.GustoTokens.FirstOrDefaultAsync(t => t.UserId == userId)
+                         ?? throw new Exception("Not connected to Gusto.");
 
             var accessToken = tok.AccessToken;
             var companyId = tok.CompanyId;
 
-            // 1) Resolve the Gusto employee ID
+            // 1) make sure the company has our post-tax benefit
+            var benefitUuid = await _svc.EnsurePostTaxBenefitAsync(accessToken, companyId);
+
+            // 2) find the employee
             var employeeId = await _svc.FindEmployeeIdByEmailAsync(
-                                 accessToken,
-                                 companyId,
-                                 m.EmployeeEmail);
+                                 accessToken, companyId, m.EmployeeEmail);
 
-            // 2) Fetch ALL company benefits
-            var benefits = await _svc.GetCompanyBenefitsAsync(accessToken, companyId);
-
-            // Debug: log the set of UUIDs we got back
-            _logger.LogDebug("Company benefits returned: {UUIDs}",
-                benefits.Select(b => b.Uuid).ToArray());
-
-            // 3) Find the one the form posted
-            var benefit = benefits
-                            .FirstOrDefault(b => b.Uuid == m.SelectedBenefitUuid);
-
-            if (benefit is null)
-                throw new Exception(
-                    $"Selected benefit '{m.SelectedBenefitUuid}' not found. " +
-                    $"Returned UUIDs: {string.Join(", ", benefits.Select(b => b.Uuid))}");
-
-            // 4) Call the service with the exact payload shape the demo API accepts
-            await _svc.CreateEmployeeDeductionAsync(
+            // 3) and *use* our single, known-good helper
+            await _svc.CreateEmployeeBenefitAsync(
                 accessToken,
                 employeeId,
-                benefit.Uuid,           // company_benefit_uuid
+                benefitUuid,
                 m.DeductionAmount!.Value);
 
             TempData["Success"] = "Deduction created successfully!";
