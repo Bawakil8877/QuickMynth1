@@ -10,6 +10,6 @@ namespace QuickMynth1.Data
 
         public DbSet<QuickMynth> QuickMynth { get; set; }
         public DbSet<GustoUserToken> GustoTokens { get; set; }
-        public DbSet<TimesheetEntry> TimesheetEntries { get; set; }
+        public DbSet<EmployeeAdvance> EmployeeAdvances { get; set; }
     }
 }

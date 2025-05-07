@@ -12,8 +12,8 @@ using QuickMynth1.Data;
 namespace QuickMynth1.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20250502093741_AddRoleSpecificField")]
-    partial class AddRoleSpecificField
+    [Migration("20250507204605_AddRoleSpecific")]
+    partial class AddRoleSpecific
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -290,6 +290,29 @@ namespace QuickMynth1.Migrations
                     b.ToTable("AspNetUsers", (string)null);
                 });
 
+            modelBuilder.Entity("QuickMynth1.Models.EmployeeAdvance", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("Amount")
+                        .HasColumnType("decimal(18,2)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("EmployeeId")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("EmployeeAdvances");
+                });
+
             modelBuilder.Entity("QuickMynth1.Models.QuickMynth", b =>
                 {
                     b.Property<int>("Id")
@@ -328,40 +351,6 @@ namespace QuickMynth1.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("QuickMynth");
-                });
-
-            modelBuilder.Entity("QuickMynth1.Models.TimesheetEntry", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("Date")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("EmployeeId")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("EmployeeName")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("ExternalId")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<decimal>("HoursWorked")
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<string>("Project")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("TimesheetEntries");
                 });
 
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>

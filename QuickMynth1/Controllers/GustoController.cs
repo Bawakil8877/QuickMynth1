@@ -7,6 +7,7 @@ using QuickMynth1.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Mvc.Rendering;
 using NuGet.Common;
+using QuickMynth1.Models;
 
 namespace QuickMynth1.Controllers
 {
@@ -58,21 +59,34 @@ namespace QuickMynth1.Controllers
             }
         }
 
-
-
         [HttpGet]
         public async Task<IActionResult> Deduction()
         {
             var uid = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-            var token = await _db.GustoTokens
-                                 .FirstOrDefaultAsync(t => t.UserId == uid)
-                        ?? throw new Exception("Not connected to Gusto.");
+            var tok = await _db.GustoTokens.FirstOrDefaultAsync(t => t.UserId == uid);
+            if (tok == null)
+            {
+                TempData["Error"] = "Your Gusto account is not connected. Please ask admin to connect once.";
+                return View(new DeductionViewModel());
+            }
 
-            // ensure (or create) the single post-tax benefit and get its UUID
-            var benefitUuid = await _svc.EnsurePostTaxBenefitAsync(token.AccessToken, token.CompanyId);
+            try
+            {
+                if (DateTime.UtcNow >= tok.CreatedAt.AddSeconds(tok.ExpiresIn))
+                {
+                    var refreshJson = await _svc.ExchangeRefreshTokenAsync(tok.RefreshToken);
+                    await _svc.SaveTokenAsync(uid, refreshJson);
+                    tok = await _db.GustoTokens.FirstAsync(t => t.UserId == uid);
+                }
+            }
+            catch
+            {
+                TempData["Error"] = "Could not refresh Gusto session. Please contact support.";
+                return View(new DeductionViewModel());
+            }
 
-            // fetch its metadata so we can show its name
-            var benefits = await _svc.GetCompanyBenefitsAsync(token.AccessToken, token.CompanyId);
+            var benefitUuid = await _svc.EnsurePostTaxBenefitAsync(tok.AccessToken, tok.CompanyId);
+            var benefits = await _svc.GetCompanyBenefitsAsync(tok.AccessToken, tok.CompanyId);
             var bene = benefits.First(b => b.Uuid == benefitUuid);
 
             var vm = new DeductionViewModel
@@ -84,8 +98,6 @@ namespace QuickMynth1.Controllers
             return View(vm);
         }
 
-        // POST: /Gusto/Deduction
-        // Controllers/GustoController.cs (only the POST action shown)
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Deduction(DeductionViewModel m)
@@ -94,30 +106,65 @@ namespace QuickMynth1.Controllers
                 return View(m);
 
             var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-            var tok = await _db.GustoTokens.FirstOrDefaultAsync(t => t.UserId == userId)
-                         ?? throw new Exception("Not connected to Gusto.");
+            var tok = await _db.GustoTokens.FirstOrDefaultAsync(t => t.UserId == userId);
+            if (tok == null)
+            {
+                ModelState.AddModelError(string.Empty, "Your Gusto account is not connected. Please ask admin to connect once.");
+                return View(m);
+            }
 
-            var accessToken = tok.AccessToken;
+            try
+            {
+                if (DateTime.UtcNow >= tok.CreatedAt.AddSeconds(tok.ExpiresIn))
+                {
+                    var refreshJson = await _svc.ExchangeRefreshTokenAsync(tok.RefreshToken);
+                    await _svc.SaveTokenAsync(userId, refreshJson);
+                    tok = await _db.GustoTokens.FirstAsync(t => t.UserId == userId);
+                }
+            }
+            catch
+            {
+                ModelState.AddModelError(string.Empty, "Could not refresh Gusto session. Please contact support.");
+                return View(m);
+            }
+
+            var access = tok.AccessToken;
             var companyId = tok.CompanyId;
+            var benefitUuid = await _svc.EnsurePostTaxBenefitAsync(access, companyId);
+            var employeeId = await _svc.FindEmployeeIdByEmailAsync(access, companyId, m.EmployeeEmail!);
+            var requested = m.DeductionAmount!.Value;
 
-            // 1) make sure the company has our post-tax benefit
-            var benefitUuid = await _svc.EnsurePostTaxBenefitAsync(accessToken, companyId);
+            decimal available;
+            try
+            {
+                available = await _svc.GetEmployeeTotalNetPayAsync(access, companyId, employeeId);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                ModelState.AddModelError(string.Empty, "Your Gusto session has expired and cannot be refreshed automatically. Please contact support.");
+                return View(m);
+            }
 
-            // 2) find the employee
-            var employeeId = await _svc.FindEmployeeIdByEmailAsync(
-                                 accessToken, companyId, m.EmployeeEmail);
+            var totalToDeduct = requested + 5m;
+            if (totalToDeduct > available)
+            {
+                ModelState.AddModelError(nameof(m.DeductionAmount),
+                    $"Insufficient funds: you have {available:C} available, but tried to deduct {totalToDeduct:C}.");
+                return View(m);
+            }
 
-            // 3) and *use* our single, known-good helper
-            await _svc.CreateEmployeeBenefitAsync(
-                accessToken,
-                employeeId,
-                benefitUuid,
-                m.DeductionAmount!.Value);
+            _db.EmployeeAdvances.Add(new EmployeeAdvance
+            {
+                EmployeeId = employeeId,
+                Amount = totalToDeduct,
+                CreatedAt = DateTime.UtcNow
+            });
+            await _db.SaveChangesAsync();
+            await _svc.CreateEmployeeBenefitAsync(access, employeeId, benefitUuid, totalToDeduct);
 
-            TempData["Success"] = "Deduction created successfully!";
+            TempData["Success"] = $"Deduction of {totalToDeduct:C} (including $5 fee) created successfully!";
             return RedirectToAction(nameof(Deduction));
         }
-
 
     }
 }

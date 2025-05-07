@@ -3,10 +3,12 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.VisualStudio.Web.CodeGenerators.Mvc.Templates.Blazor;
 using QuickMynth1.Data;
 using QuickMynth1.Models;
+using QuickMynth1.Models.ViewModels;
 
 namespace QuickMynth1.Services
 {
@@ -42,14 +44,6 @@ namespace QuickMynth1.Services
             _httpFactory = httpFactory;
         }
 
-        public string GetAuthorizationUrl()
-        {
-            var client = _config["GustoOAuth:ClientId"];
-            var redirect = Uri.EscapeDataString(_config["GustoOAuth:RedirectUri"]);
-            var scopes = Uri.EscapeDataString(_config["GustoOAuth:Scopes"]);
-            return $"{_base}/oauth/authorize?client_id={client}&redirect_uri={redirect}&response_type=code&scope={scopes}";
-        }
-
         private HttpClient Client(string token)
         {
             var c = _httpFactory.CreateClient();
@@ -59,10 +53,17 @@ namespace QuickMynth1.Services
             return c;
         }
 
+        public string GetAuthorizationUrl()
+        {
+            var clientId = _config["GustoOAuth:ClientId"];
+            var redirect = Uri.EscapeDataString(_config["GustoOAuth:RedirectUri"]);
+            var scopes = Uri.EscapeDataString(_config["GustoOAuth:Scopes"]);
+            return $"{_base}/oauth/authorize?client_id={clientId}&redirect_uri={redirect}&response_type=code&scope={scopes}";
+        }
 
         public async Task<string> ExchangeCodeForTokenAsync(string code)
         {
-            var client = _http.CreateClient();
+            var client = _httpFactory.CreateClient();
             var cred = Convert.ToBase64String(
                 Encoding.UTF8.GetBytes($"{_config["GustoOAuth:ClientId"]}:{_config["GustoOAuth:ClientSecret"]}"));
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", cred);
@@ -81,21 +82,24 @@ namespace QuickMynth1.Services
             return body;
         }
 
-        public async Task<string> GetCompanyIdFromTokenInfoAsync(string token)
+        public async Task<string> ExchangeRefreshTokenAsync(string refreshToken)
         {
-            var client = _http.CreateClient();
-            client.DefaultRequestHeaders.Authorization =
-                new AuthenticationHeaderValue("Bearer", token);
-            client.DefaultRequestHeaders.Add("X-Gusto-API-Version", _version);
+            var client = _httpFactory.CreateClient();
+            var cred = Convert.ToBase64String(
+                Encoding.UTF8.GetBytes($"{_config["GustoOAuth:ClientId"]}:{_config["GustoOAuth:ClientSecret"]}"));
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Basic", cred);
 
-            var resp = await client.GetAsync($"{_base}/v1/token_info");
+            var form = new FormUrlEncodedContent(new[]
+            {
+                new KeyValuePair<string,string>("grant_type","refresh_token"),
+                new KeyValuePair<string,string>("refresh_token", refreshToken)
+            });
+
+            var resp = await client.PostAsync($"{_base}/oauth/token", form);
             var body = await resp.Content.ReadAsStringAsync();
             if (!resp.IsSuccessStatusCode)
-                throw new Exception($"token_info failed: {body}");
-
-            var info = JsonSerializer.Deserialize<TokenInfoResponse>(body)
-                       ?? throw new Exception("Invalid token_info JSON");
-            return info.ResourceInfo.Uuid;
+                throw new Exception($"Refresh Token Failed: {body}");
+            return body;
         }
 
         public async Task SaveTokenAsync(string userId, string tokenJson)
@@ -104,10 +108,7 @@ namespace QuickMynth1.Services
                       ?? throw new Exception("Invalid token JSON");
             var cid = await GetCompanyIdFromTokenInfoAsync(tok.AccessToken);
 
-            // Get the first (or null) existing token
-            var existing = await _db.GustoTokens
-                                    .FirstOrDefaultAsync(t => t.UserId == userId);
-
+            var existing = await _db.GustoTokens.FirstOrDefaultAsync(t => t.UserId == userId);
             if (existing != null)
             {
                 existing.AccessToken = tok.AccessToken;
@@ -128,9 +129,21 @@ namespace QuickMynth1.Services
                     CompanyId = cid
                 });
             }
-
             await _db.SaveChangesAsync();
         }
+
+        private async Task<string> GetCompanyIdFromTokenInfoAsync(string token)
+        {
+            var client = Client(token);
+            var resp = await client.GetAsync($"/v1/token_info");
+            var body = await resp.Content.ReadAsStringAsync();
+            if (!resp.IsSuccessStatusCode)
+                throw new Exception($"token_info failed: {body}");
+            var info = JsonSerializer.Deserialize<TokenInfoResponse>(body)
+                       ?? throw new Exception("Invalid token_info JSON");
+            return info.ResourceInfo.Uuid;
+        }
+
 
 
         public async Task<List<CompanyBenefit>> GetCompanyBenefitsAsync(string token, string companyId)
@@ -331,38 +344,65 @@ namespace QuickMynth1.Services
             _logger.LogInformation("=== Gusto Supported Benefits ===\n{json}", json);
         }
 
-        public async Task<decimal> GetHourlyRateAsync(string token, string companyId, string employeeId)
+
+        public async Task<decimal> GetEmployeeTotalNetPayAsync(string token, string companyId, string employeeId)
         {
             var client = Client(token);
-            var url = $"{_base}/v1/companies/{companyId}/employees/{employeeId}/compensation";
-            var resp = await client.GetAsync(url);
-            resp.EnsureSuccessStatusCode();
-            var json = await resp.Content.ReadAsStringAsync();
-            var comp = JsonSerializer.Deserialize<CompensationResponse>(json, new JsonSerializerOptions
+            var since = DateTime.UtcNow.AddYears(-1).ToString("yyyy-MM-dd");
+            var respList = await client.GetAsync($"/v1/companies/{companyId}/payrolls?processing_status=processed&start_date={since}");
+            if (respList.StatusCode == HttpStatusCode.Unauthorized)
+                throw new UnauthorizedAccessException("Access token expired or invalid.");
+            respList.EnsureSuccessStatusCode();
+
+            var runs = JsonSerializer.Deserialize<List<PayrollSummary>>(await respList.Content.ReadAsStringAsync(),
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
+
+            decimal totalNet = 0m;
+            foreach (var run in runs)
             {
-                PropertyNameCaseInsensitive = true
-            })!;
-            return comp.HourlyRate;
+                var runId = run.Uuid;
+                if (string.IsNullOrWhiteSpace(runId))
+                    continue;
+
+                var resp = await client.GetAsync($"/v1/companies/{companyId}/payrolls/{runId}");
+                if (resp.StatusCode == HttpStatusCode.Unauthorized)
+                    throw new UnauthorizedAccessException("Access token expired or invalid.");
+                resp.EnsureSuccessStatusCode();
+
+                var detail = JsonSerializer.Deserialize<PayrollDetail>(await resp.Content.ReadAsStringAsync(),
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
+
+                // Attempt to get employee-specific net pay
+                decimal netPay = 0m;
+                var empComp = detail.EmployeeCompensations.FirstOrDefault(e => e.EmployeeId == employeeId);
+                if (empComp != null)
+                {
+                    if (empComp.NetPayRaw.ValueKind == JsonValueKind.Number)
+                        netPay = empComp.NetPayRaw.GetDecimal();
+                    else if (empComp.NetPayRaw.ValueKind == JsonValueKind.String)
+                        Decimal.TryParse(empComp.NetPayRaw.GetString(), out netPay);
+                }
+                else
+                {
+                    // Fallback to total run net pay
+                    var tot = detail.Totals.NetPayRaw;
+                    if (tot.ValueKind == JsonValueKind.Number)
+                        netPay = tot.GetDecimal();
+                    else if (tot.ValueKind == JsonValueKind.String)
+                        Decimal.TryParse(tot.GetString(), out netPay);
+                }
+
+                totalNet += netPay;
+            }
+
+            // Subtract any advances already recorded
+            var alreadyAdvanced = await _db.EmployeeAdvances
+                                              .Where(a => a.EmployeeId == employeeId)
+                                              .SumAsync(a => a.Amount);
+            return totalNet - alreadyAdvanced;
         }
-
-        public async Task RegisterWebhookAsync(string token, string companyId, string callbackUrl)
-        {
-            var client = Client(token);
-            var payload = new
-            {
-                event_type = "TimeEntryCreated",
-                company_uuid = companyId,
-                target_url = callbackUrl
-            };
-            var content = new StringContent(
-                JsonSerializer.Serialize(payload),
-                Encoding.UTF8,
-                "application/json");
-
-            var resp = await client.PostAsync($"{_base}/v1/webhooks", content);
-            resp.EnsureSuccessStatusCode();
-        }
-
 
     }
+
 }
+
