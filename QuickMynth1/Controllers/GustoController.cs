@@ -29,6 +29,10 @@ namespace QuickMynth1.Controllers
             _gustoService = gustoService;
         }
 
+        // helper to see if *any* token exists for this user’s company
+        private async Task<bool> CompanyIsConnectedAsync(string companyId) =>
+            await _db.GustoTokens.AnyAsync(t => t.CompanyId == companyId);
+
         [HttpGet]
         public IActionResult Connect()
         {
@@ -64,25 +68,17 @@ namespace QuickMynth1.Controllers
         {
             var uid = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
             var tok = await _db.GustoTokens.FirstOrDefaultAsync(t => t.UserId == uid);
-            if (tok == null)
+            if (tok == null || !await CompanyIsConnectedAsync(tok.CompanyId))
             {
-                TempData["Error"] = "Your Gusto account is not connected. Please ask admin to connect once.";
-                return View(new DeductionViewModel());
+                return View("CompanyNotConnected");
             }
 
-            try
+            // refresh if needed…
+            if (DateTime.UtcNow >= tok.CreatedAt.AddSeconds(tok.ExpiresIn))
             {
-                if (DateTime.UtcNow >= tok.CreatedAt.AddSeconds(tok.ExpiresIn))
-                {
-                    var refreshJson = await _svc.ExchangeRefreshTokenAsync(tok.RefreshToken);
-                    await _svc.SaveTokenAsync(uid, refreshJson);
-                    tok = await _db.GustoTokens.FirstAsync(t => t.UserId == uid);
-                }
-            }
-            catch
-            {
-                TempData["Error"] = "Could not refresh Gusto session. Please contact support.";
-                return View(new DeductionViewModel());
+                var refreshJson = await _svc.ExchangeRefreshTokenAsync(tok.RefreshToken);
+                await _svc.SaveTokenAsync(uid, refreshJson);
+                tok = await _db.GustoTokens.FirstAsync(t => t.UserId == uid);
             }
 
             var benefitUuid = await _svc.EnsurePostTaxBenefitAsync(tok.AccessToken, tok.CompanyId);
@@ -102,57 +98,106 @@ namespace QuickMynth1.Controllers
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Deduction(DeductionViewModel m)
         {
+            // 1) Get current user
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            if (string.IsNullOrEmpty(userId))
+            {
+                // Not logged in?
+                return Challenge();
+            }
+
+            // 2) Lookup existing token row
+            var tok = await _db.GustoTokens
+                .FirstOrDefaultAsync(t => t.UserId == userId);
+
+            // 3) If no token => company not connected yet
+            if (tok == null)
+            {
+                // You could also ModelState.AddModelError + return View(m)
+                return View("CompanyNotConnected");
+            }
+
+            // 4) Re-check “company connected” by ensuring at least one token exists
+            var companyConnected = await _db.GustoTokens
+                .AnyAsync(t => t.CompanyId == tok.CompanyId);
+            if (!companyConnected)
+            {
+                return View("CompanyNotConnected");
+            }
+
+            // 5) Model validation
             if (!ModelState.IsValid)
                 return View(m);
 
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-            var tok = await _db.GustoTokens.FirstOrDefaultAsync(t => t.UserId == userId);
-            if (tok == null)
+            // 6) Refresh token if expired
+            var expiresAt = tok.CreatedAt.AddSeconds(tok.ExpiresIn);
+            if (DateTime.UtcNow >= expiresAt)
             {
-                ModelState.AddModelError(string.Empty, "Your Gusto account is not connected. Please ask admin to connect once.");
-                return View(m);
-            }
-
-            try
-            {
-                if (DateTime.UtcNow >= tok.CreatedAt.AddSeconds(tok.ExpiresIn))
+                try
                 {
                     var refreshJson = await _svc.ExchangeRefreshTokenAsync(tok.RefreshToken);
                     await _svc.SaveTokenAsync(userId, refreshJson);
                     tok = await _db.GustoTokens.FirstAsync(t => t.UserId == userId);
                 }
+                catch
+                {
+                    ModelState.AddModelError(string.Empty,
+                        "Could not refresh your Gusto session. Please ask your admin to reconnect.");
+                    return View(m);
+                }
             }
-            catch
+
+            // 7) Find (or create) the Post-Tax benefit for the company
+            var benefitUuid = await _svc.EnsurePostTaxBenefitAsync(
+                tok.AccessToken,
+                tok.CompanyId);
+
+            // 8) Find this employee’s Gusto employee-ID by their email
+            string employeeId;
+            try
             {
-                ModelState.AddModelError(string.Empty, "Could not refresh Gusto session. Please contact support.");
+                employeeId = await _svc.FindEmployeeIdByEmailAsync(
+                    tok.AccessToken,
+                    tok.CompanyId,
+                    m.EmployeeEmail!);
+            }
+            catch (Exception ex)
+            {
+                ModelState.AddModelError(string.Empty,
+                    $"Could not find your employee record in Gusto: {ex.Message}");
                 return View(m);
             }
 
-            var access = tok.AccessToken;
-            var companyId = tok.CompanyId;
-            var benefitUuid = await _svc.EnsurePostTaxBenefitAsync(access, companyId);
-            var employeeId = await _svc.FindEmployeeIdByEmailAsync(access, companyId, m.EmployeeEmail!);
-            var requested = m.DeductionAmount!.Value;
-
+            // 9) Calculate how much net pay is available over past year
             decimal available;
             try
             {
-                available = await _svc.GetEmployeeTotalNetPayAsync(access, companyId, employeeId);
+                available = await _svc.GetEmployeeTotalNetPayAsync(
+                    tok.AccessToken,
+                    tok.CompanyId,
+                    employeeId);
             }
             catch (UnauthorizedAccessException)
             {
-                ModelState.AddModelError(string.Empty, "Your Gusto session has expired and cannot be refreshed automatically. Please contact support.");
+                ModelState.AddModelError(string.Empty,
+                    "Your Gusto session has expired and cannot be refreshed automatically. Please ask your admin to reconnect.");
                 return View(m);
             }
 
-            var totalToDeduct = requested + 5m;
+            // 10) Compute total to deduct (requested + $5 fee)
+            const decimal Fee = 5m;
+            var requested = m.DeductionAmount!.Value;
+            var totalToDeduct = requested + Fee;
+
             if (totalToDeduct > available)
             {
                 ModelState.AddModelError(nameof(m.DeductionAmount),
-                    $"Insufficient funds: you have {available:C} available, but tried to deduct {totalToDeduct:C}.");
+                    $"Insufficient funds: you have {available:C} available, " +
+                    $"but tried to deduct {totalToDeduct:C} (including {Fee:C} fee).");
                 return View(m);
             }
 
+            // 11) Persist the advance locally
             _db.EmployeeAdvances.Add(new EmployeeAdvance
             {
                 EmployeeId = employeeId,
@@ -160,9 +205,27 @@ namespace QuickMynth1.Controllers
                 CreatedAt = DateTime.UtcNow
             });
             await _db.SaveChangesAsync();
-            await _svc.CreateEmployeeBenefitAsync(access, employeeId, benefitUuid, totalToDeduct);
 
-            TempData["Success"] = $"Deduction of {totalToDeduct:C} (including $5 fee) created successfully!";
+            // 12) Call Gusto to create the employee benefit deduction
+            try
+            {
+                await _svc.CreateEmployeeBenefitAsync(
+                    tok.AccessToken,
+                    employeeId,
+                    benefitUuid,
+                    totalToDeduct);
+            }
+            catch (Exception ex)
+            {
+                // Optionally roll back the local advance or log
+                ModelState.AddModelError(string.Empty,
+                    $"Failed to create deduction in Gusto: {ex.Message}");
+                return View(m);
+            }
+
+            // 13) All done!
+            TempData["Success"] =
+                $"Deduction of {totalToDeduct:C} (including {Fee:C} fee) created successfully!";
             return RedirectToAction(nameof(Deduction));
         }
 
