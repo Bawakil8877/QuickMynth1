@@ -1,4 +1,9 @@
 ﻿@model QuickMynth1.Models.ViewModels.DeductionViewModel
+@{
+    const decimal Fee = 5m;
+    var totalIfEntered = (Model.DeductionAmount ?? 0m) + Fee;
+    bool canAfford = Model.AvailableFunds >= totalIfEntered;
+}
 
 @if (TempData["Error"] != null)
 {
@@ -8,6 +13,9 @@
 {
     <div class="alert alert-success">@TempData["Success"]</div>
 }
+<div>
+    <p>Your available net pay this period: <strong>@Model.AvailableFunds:C</strong></p>
+</div>
 
 <form asp-action="Deduction" method="post">
     @Html.AntiForgeryToken()
@@ -26,7 +34,17 @@
         <span asp-validation-for="DeductionAmount" class="text-danger"></span>
     </div>
 
-    <button type="submit" class="btn btn-primary">Create Deduction</button>
+    <button type="submit"
+            class="btn btn-primary"
+    @(canAfford ? "" : "disabled")>
+        Submit Advance (includes $5 fee)
+    </button>
+    @if (!canAfford)
+    {
+        <p class="text-danger">
+            You need at least @(Fee.ToString("C")) plus your advance amount in available funds.
+        </p>
+    }
 </form>
 
 @section Scripts {

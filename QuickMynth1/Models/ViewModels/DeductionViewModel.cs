@@ -10,12 +10,14 @@ namespace QuickMynth1.Models.ViewModels
         [Required]
         public string SelectedBenefitUuid { get; set; } = "";
 
-        // just to show the name on the form
         public string BenefitName { get; set; } = "";
 
-        [Required]
-        [Display(Name = "Deduction Amount")]
-        [Range(0.01, double.MaxValue, ErrorMessage = "Please enter a positive amount")]
+        [Display(Name = "Advance Amount")]
+        [Range(0.01, double.MaxValue, ErrorMessage = "Must be at least $0.01")]
         public decimal? DeductionAmount { get; set; }
+
+        // ← new
+        public decimal AvailableFunds { get; set; }
     }
+
 }

@@ -344,62 +344,71 @@ namespace QuickMynth1.Services
             _logger.LogInformation("=== Gusto Supported Benefits ===\n{json}", json);
         }
 
-
-        public async Task<decimal> GetEmployeeTotalNetPayAsync(string token, string companyId, string employeeId)
+        public async Task<decimal> GetEmployeeCurrentNetPayAsync(
+    string token,
+    string companyId,
+    string employeeId)
         {
             var client = Client(token);
-            var since = DateTime.UtcNow.AddYears(-1).ToString("yyyy-MM-dd");
-            var respList = await client.GetAsync($"/v1/companies/{companyId}/payrolls?processing_status=processed&start_date={since}");
-            if (respList.StatusCode == HttpStatusCode.Unauthorized)
-                throw new UnauthorizedAccessException("Access token expired or invalid.");
-            respList.EnsureSuccessStatusCode();
 
-            var runs = JsonSerializer.Deserialize<List<PayrollSummary>>(await respList.Content.ReadAsStringAsync(),
-                new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
+            // 1) Fetch all processed payroll runs
+            var runsResp = await client.GetAsync(
+                $"/v1/companies/{companyId}/payrolls?processing_status=processed"
+            );
+            runsResp.EnsureSuccessStatusCode();
 
-            decimal totalNet = 0m;
-            foreach (var run in runs)
+            var runsJson = await runsResp.Content.ReadAsStringAsync();
+            using var runsDoc = JsonDocument.Parse(runsJson);
+            var runsArray = runsDoc.RootElement.EnumerateArray();
+
+            JsonElement? latestRun = null;
+            DateTime latestEnd = DateTime.MinValue;
+            foreach (var run in runsArray)
             {
-                var runId = run.Uuid;
-                if (string.IsNullOrWhiteSpace(runId))
-                    continue;
-
-                var resp = await client.GetAsync($"/v1/companies/{companyId}/payrolls/{runId}");
-                if (resp.StatusCode == HttpStatusCode.Unauthorized)
-                    throw new UnauthorizedAccessException("Access token expired or invalid.");
-                resp.EnsureSuccessStatusCode();
-
-                var detail = JsonSerializer.Deserialize<PayrollDetail>(await resp.Content.ReadAsStringAsync(),
-                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
-
-                // Attempt to get employee-specific net pay
-                decimal netPay = 0m;
-                var empComp = detail.EmployeeCompensations.FirstOrDefault(e => e.EmployeeId == employeeId);
-                if (empComp != null)
+                var endDate = run.GetProperty("pay_period").GetProperty("end_date").GetDateTime();
+                if (endDate > latestEnd)
                 {
-                    if (empComp.NetPayRaw.ValueKind == JsonValueKind.Number)
-                        netPay = empComp.NetPayRaw.GetDecimal();
-                    else if (empComp.NetPayRaw.ValueKind == JsonValueKind.String)
-                        Decimal.TryParse(empComp.NetPayRaw.GetString(), out netPay);
+                    latestEnd = endDate;
+                    latestRun = run;
                 }
-                else
-                {
-                    // Fallback to total run net pay
-                    var tot = detail.Totals.NetPayRaw;
-                    if (tot.ValueKind == JsonValueKind.Number)
-                        netPay = tot.GetDecimal();
-                    else if (tot.ValueKind == JsonValueKind.String)
-                        Decimal.TryParse(tot.GetString(), out netPay);
-                }
-
-                totalNet += netPay;
             }
+            if (latestRun == null)
+                throw new Exception($"No processed payroll runs for company {companyId}");
 
-            // Subtract any advances already recorded
+            var payPeriod = latestRun.Value.GetProperty("pay_period");
+            var periodStart = payPeriod.GetProperty("start_date").GetDateTime();
+            var periodEnd = payPeriod.GetProperty("end_date").GetDateTime();
+            var runId = latestRun.Value.GetProperty("uuid").GetString()!;
+
+            var detailResp = await client.GetAsync(
+                $"/v1/companies/{companyId}/payrolls/{runId}"
+            );
+            detailResp.EnsureSuccessStatusCode();
+
+            var detailJson = await detailResp.Content.ReadAsStringAsync();
+            using var detailDoc = JsonDocument.Parse(detailJson);
+            var comps = detailDoc.RootElement.GetProperty("employee_compensations").EnumerateArray();
+
+            // Find the matching compensation JSON element
+            JsonElement? compElem = comps.FirstOrDefault(c =>
+                c.GetProperty("employee_uuid").GetString() == employeeId
+            );
+            if (compElem == null)
+                return 0m;
+
+            // Extract net pay (fall back to net_pay if needed)
+            decimal netPay = compElem.Value.TryGetProperty("net_pay", out var nProp) && nProp.ValueKind == JsonValueKind.Number
+                ? nProp.GetDecimal()
+                : compElem.Value.GetProperty("check_amount").GetDecimal();
+
+            // Sum local advances in period
             var alreadyAdvanced = await _db.EmployeeAdvances
-                                              .Where(a => a.EmployeeId == employeeId)
-                                              .SumAsync(a => a.Amount);
-            return totalNet - alreadyAdvanced;
+                .Where(a => a.EmployeeId == employeeId
+                            && a.CreatedAt >= periodStart
+                            && a.CreatedAt <= periodEnd)
+                .SumAsync(a => a.Amount);
+
+            return netPay - alreadyAdvanced;
         }
 
     }
