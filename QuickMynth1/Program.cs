@@ -57,7 +57,11 @@ builder.Services.AddScoped<OAuthService>();
 builder.Services.AddHttpContextAccessor(); // if needed
 builder.Services.AddScoped<GustoService>();
 builder.Services.AddScoped<FinchService>();
-builder.Services.AddHttpClient<GustoService>();
+// 2. Register the HttpClient factory
+builder.Services.AddHttpClient();
+
+// 3. Register GustoService itself
+builder.Services.AddScoped<GustoService>();
 builder.Services
     .AddHttpClient("Gusto")
     .AddHttpMessageHandler(() => new LoggingHandler(logger: builder.Services

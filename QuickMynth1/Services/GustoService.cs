@@ -1,47 +1,47 @@
 ﻿// Services/GustoService.cs
-using System.Net;
+
+using System;
+using System.Collections.Generic;
+using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Threading.Tasks;
+using Google.Apis.Auth.OAuth2.Responses;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.VisualStudio.Web.CodeGenerators.Mvc.Templates.Blazor;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using QuickMynth1.Data;
 using QuickMynth1.Models;
 using QuickMynth1.Models.ViewModels;
+using static System.Net.WebRequestMethods;
+using GoogleTokenResponse = Google.Apis.Auth.OAuth2.Responses.TokenResponse;
+using MyTokenResponse = QuickMynth1.Models.TokenResponse;
+
 
 namespace QuickMynth1.Services
 {
     public class GustoService
     {
-       
         private readonly IConfiguration _config;
-        private readonly IHttpClientFactory _http;
+        private readonly IHttpClientFactory _httpFactory;
         private readonly ApplicationDbContext _db;
+        private readonly ILogger<GustoService> _logger;
         private readonly string _base = "https://api.gusto-demo.com";
         private readonly string _version;
-        private readonly HttpClient _client;
-        private readonly HttpClient _httpClient;
-        private readonly IConfiguration _configuration;
-        private readonly ILogger<GustoService> _logger;
-        private readonly IHttpClientFactory _httpFactory;
+
         public GustoService(
             IConfiguration config,
-            IHttpClientFactory httpClientFactory,
-            HttpClient httpClient,
-            IConfiguration configuration,
+            IHttpClientFactory httpFactory,
             ILogger<GustoService> logger,
-            ApplicationDbContext context,
-            IHttpClientFactory httpFactory)
+            ApplicationDbContext db)
         {
             _config = config;
-            _http = httpClientFactory;
-            _httpClient = httpClient;
-            _configuration = configuration;
-            _db = context;
-            _version = _config["GustoOAuth:ApiVersion"] ?? "2024-04-01";
-            _logger = logger;
             _httpFactory = httpFactory;
+            _logger = logger;
+            _db = db;
+            _version = _config["GustoOAuth:ApiVersion"] ?? "2024-04-01";
         }
 
         private HttpClient Client(string token)
@@ -78,7 +78,7 @@ namespace QuickMynth1.Services
             var resp = await client.PostAsync($"{_base}/oauth/token", form);
             var body = await resp.Content.ReadAsStringAsync();
             if (!resp.IsSuccessStatusCode)
-                throw new Exception($"Token Exchange Failed: {body}");
+                throw new Exception($"Token exchange failed: {body}");
             return body;
         }
 
@@ -98,7 +98,7 @@ namespace QuickMynth1.Services
             var resp = await client.PostAsync($"{_base}/oauth/token", form);
             var body = await resp.Content.ReadAsStringAsync();
             if (!resp.IsSuccessStatusCode)
-                throw new Exception($"Refresh Token Failed: {body}");
+                throw new Exception($"Refresh token failed: {body}");
             return body;
         }
 
@@ -134,14 +134,75 @@ namespace QuickMynth1.Services
 
         private async Task<string> GetCompanyIdFromTokenInfoAsync(string token)
         {
-            var client = Client(token);
-            var resp = await client.GetAsync($"/v1/token_info");
+            var resp = await Client(token).GetAsync("/v1/token_info");
             var body = await resp.Content.ReadAsStringAsync();
             if (!resp.IsSuccessStatusCode)
                 throw new Exception($"token_info failed: {body}");
             var info = JsonSerializer.Deserialize<TokenInfoResponse>(body)
                        ?? throw new Exception("Invalid token_info JSON");
             return info.ResourceInfo.Uuid;
+        }
+
+        public async Task<string> GetRawTimeSheetsJsonAsync(
+            string token, string companyId, DateTime start, DateTime end)
+        {
+            var url = $"/v1/companies/{companyId}/time_tracking/time_sheets" +
+                       $"?pay_period_start={start:yyyy-MM-dd}&pay_period_end={end:yyyy-MM-dd}";
+            var resp = await Client(token).GetAsync(url);
+            resp.EnsureSuccessStatusCode();
+            return await resp.Content.ReadAsStringAsync();
+        }
+
+        public async Task<List<TimesheetEntry>> GetTimesheetEntriesAsync(
+            string token, string companyId, DateTime start, DateTime end)
+        {
+            var json = await GetRawTimeSheetsJsonAsync(token, companyId, start, end);
+            _logger.LogDebug("TimeSheets JSON: {json}", json);
+            return JsonSerializer.Deserialize<List<TimesheetEntry>>(json, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            }) ?? new List<TimesheetEntry>();
+        }
+
+        public async Task<decimal> GetHourlyRateAsync(
+            string token, string companyId, string employeeId)
+        {
+            var resp = await Client(token)
+                .GetAsync($"/v1/companies/{companyId}/employees/{employeeId}/compensation");
+            resp.EnsureSuccessStatusCode();
+            var json = await resp.Content.ReadAsStringAsync();
+            var comp = JsonSerializer.Deserialize<CompensationResponse>(json, new JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            })!;
+            return comp.HourlyRate;
+        }
+
+        public async Task<GustoToken> RefreshTokenAsync(string refreshToken)
+        {
+            var form = new FormUrlEncodedContent(new Dictionary<string, string>
+    {
+        { "grant_type",    "refresh_token" },
+        { "refresh_token", refreshToken },
+        { "client_id",     _config["GustoOAuth:ClientId"]! },
+        { "client_secret", _config["GustoOAuth:ClientSecret"]! }
+    });
+
+            var resp = await _httpFactory.CreateClient().PostAsync($"{_base}/oauth/token", form);
+            resp.EnsureSuccessStatusCode();
+            var json = await resp.Content.ReadAsStringAsync();
+
+            // Deserialize into your own model that has an ExpiresIn property
+            var tr = JsonSerializer.Deserialize<MyTokenResponse>(json)
+                     ?? throw new Exception("Invalid token response");
+
+            return new GustoToken
+            {
+                AccessToken = tr.AccessToken,
+                RefreshToken = tr.RefreshToken,
+                ExpiresIn = tr.ExpiresIn,
+                CreatedAt = DateTime.UtcNow
+            };
         }
 
 
@@ -203,7 +264,8 @@ namespace QuickMynth1.Services
 
         public async Task<string> FindEmployeeIdByEmailAsync(string token, string companyId, string email)
         {
-            var client = _http.CreateClient();
+            // Use the factory, not a nonexistent _http
+            var client = _httpFactory.CreateClient();
             client.DefaultRequestHeaders.Authorization =
                 new AuthenticationHeaderValue("Bearer", token);
             client.DefaultRequestHeaders.Add("X-Gusto-API-Version", _version);
@@ -220,6 +282,7 @@ namespace QuickMynth1.Services
             return emp?.Id
                    ?? throw new Exception($"Employee '{email}' not found.");
         }
+
 
         /// <summary>
         /// The one payload shape that the demo API accepts for any employee_benefit add.
@@ -268,7 +331,8 @@ namespace QuickMynth1.Services
 
             if (!resp.IsSuccessStatusCode)
                 throw new Exception($"employee_benefits failed: {body}");
-        }
+
+          }
 
 
         public async Task<string> EnsurePostTaxBenefitAsync(string token, string companyId)
@@ -414,4 +478,5 @@ namespace QuickMynth1.Services
     }
 
 }
+
 

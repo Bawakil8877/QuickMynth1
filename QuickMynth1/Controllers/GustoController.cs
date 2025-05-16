@@ -1,13 +1,17 @@
-﻿using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Mvc;
+﻿// Controllers/GustoController.cs
+
+using System;
+using System.Linq;
 using System.Security.Claims;
-using QuickMynth1.Services;
-using QuickMynth1.Models.ViewModels;
-using QuickMynth1.Data;
+using System.Threading.Tasks;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.AspNetCore.Mvc.Rendering;
-using NuGet.Common;
+using Microsoft.Extensions.Logging;
+using QuickMynth1.Data;
 using QuickMynth1.Models;
+using QuickMynth1.Models.ViewModels;
+using QuickMynth1.Services;
 
 namespace QuickMynth1.Controllers
 {
@@ -17,16 +21,34 @@ namespace QuickMynth1.Controllers
         private readonly GustoService _svc;
         private readonly ApplicationDbContext _db;
         private readonly ILogger<GustoController> _logger;
-        private readonly HttpClient _client;
-        private readonly GustoService _gustoService;
 
-        public GustoController(GustoService svc, ApplicationDbContext db, ILogger<GustoController> logger, HttpClient client, GustoService gustoService)
+        public GustoController(
+            GustoService svc,
+            ApplicationDbContext db,
+            ILogger<GustoController> logger)
         {
             _svc = svc;
             _db = db;
             _logger = logger;
-            _client = client;
-            _gustoService = gustoService;
+        }
+
+        [HttpGet]
+        public IActionResult Connect()
+            => Redirect(_svc.GetAuthorizationUrl());
+
+        [HttpGet]
+        public async Task<IActionResult> Callback(string code, string error)
+        {
+            if (!string.IsNullOrEmpty(error))
+                return Content($"OAuth Error: {error}");
+            if (string.IsNullOrEmpty(code))
+                return Content("Missing authorization code.");
+
+            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+            var tokenJs = await _svc.ExchangeCodeForTokenAsync(code);
+            await _svc.SaveTokenAsync(userId, tokenJs);
+            TempData["Success"] = "Connected to Gusto!";
+            return RedirectToAction(nameof(Deduction));
         }
 
         // helper to see if *any* token exists for this user’s company
@@ -34,185 +56,125 @@ namespace QuickMynth1.Controllers
             await _db.GustoTokens.AnyAsync(t => t.CompanyId == companyId);
 
         [HttpGet]
-        public IActionResult Connect()
-        {
-            var authorizationUrl = _gustoService.GetAuthorizationUrl();
-            return Redirect(authorizationUrl);
-        }
-
-        [HttpGet]
-        public async Task<IActionResult> Callback(string code, string error)
-        {
-            if (!string.IsNullOrEmpty(error))
-                return Content($"OAuth Error: {error}");
-
-            if (string.IsNullOrEmpty(code))
-                return Content("Missing Authorization Code.");
-
-            try
-            {
-                var tokenJson = await _gustoService.ExchangeCodeForTokenAsync(code);
-                var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-                await _gustoService.SaveTokenAsync(userId, tokenJson);
-
-                return Content("Gusto authorization successful! Token saved.");
-            }
-            catch (Exception ex)
-            {
-                return Content($"Error during Gusto OAuth: {ex.Message}");
-            }
-        }
-
-        [HttpGet]
         public async Task<IActionResult> Deduction()
         {
-            var uid = User.FindFirstValue(ClaimTypes.NameIdentifier)!;
-            var tok = await _db.GustoTokens.FirstOrDefaultAsync(t => t.UserId == uid);
-            if (tok == null || !await CompanyIsConnectedAsync(tok.CompanyId))
-                return View("CompanyNotConnected");
+            var tok = await GetValidTokenAsync();
+            if (tok == null) return View("CompanyNotConnected");
 
-            // refresh if needed
-            if (DateTime.UtcNow >= tok.CreatedAt.AddSeconds(tok.ExpiresIn))
-            {
-                var refreshJson = await _svc.ExchangeRefreshTokenAsync(tok.RefreshToken);
-                await _svc.SaveTokenAsync(uid, refreshJson);
-                tok = await _db.GustoTokens.FirstAsync(t => t.UserId == uid);
-            }
-
-            // ensure benefit exists
             var benefitUuid = await _svc.EnsurePostTaxBenefitAsync(tok.AccessToken, tok.CompanyId);
             var benefits = await _svc.GetCompanyBenefitsAsync(tok.AccessToken, tok.CompanyId);
             var bene = benefits.First(b => b.Uuid == benefitUuid);
 
-            // *** new: lookup the employee and their available funds ***
-            var employeeId = await _svc.FindEmployeeIdByEmailAsync(tok.AccessToken, tok.CompanyId, User.FindFirstValue(ClaimTypes.Email)!);
-            var available = await _svc.GetEmployeeCurrentNetPayAsync(tok.AccessToken, tok.CompanyId, employeeId);
+            var email = User.FindFirstValue(ClaimTypes.Email)!;
+            var empId = await _svc.FindEmployeeIdByEmailAsync(tok.AccessToken, tok.CompanyId, email);
+            var available = await _svc.GetEmployeeCurrentNetPayAsync(tok.AccessToken, tok.CompanyId, empId);
 
             var vm = new DeductionViewModel
             {
-                EmployeeEmail = User.FindFirstValue(ClaimTypes.Email)!,
+                EmployeeEmail = email,
                 SelectedBenefitUuid = benefitUuid,
                 BenefitName = bene.Name,
-                AvailableFunds = available    // ← populated here
+                AvailableFunds = available
             };
-
             return View(vm);
         }
-
 
         [HttpPost]
         [ValidateAntiForgeryToken]
         public async Task<IActionResult> Deduction(DeductionViewModel m)
         {
-            // 1) Auth & Model validation
-            var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
-            if (string.IsNullOrEmpty(userId)) return Challenge();
+            var tok = await GetValidTokenAsync();
+            if (tok == null) return View("CompanyNotConnected");
             if (!ModelState.IsValid) return View(m);
 
-            // 2) Load & refresh Gusto token
-            var tok = await _db.GustoTokens.FirstOrDefaultAsync(t => t.UserId == userId);
-            if (tok == null) return View("CompanyNotConnected");
-
-            if (DateTime.UtcNow >= tok.CreatedAt.AddSeconds(tok.ExpiresIn))
-            {
-                try
-                {
-                    var json = await _svc.ExchangeRefreshTokenAsync(tok.RefreshToken);
-                    await _svc.SaveTokenAsync(userId, json);
-                    tok = await _db.GustoTokens.FirstAsync(t => t.UserId == userId);
-                }
-                catch
-                {
-                    ModelState.AddModelError("", "Could not refresh Gusto session. Please reconnect.");
-                    return View(m);
-                }
-            }
-
-            // 3) Lookup employee’s Gusto ID
-            string employeeId;
-            try
-            {
-                employeeId = await _svc.FindEmployeeIdByEmailAsync(
-                    tok.AccessToken, tok.CompanyId, m.EmployeeEmail!);
-            }
-            catch (Exception ex)
-            {
-                ModelState.AddModelError("", $"Employee lookup failed: {ex.Message}");
-                return View(m);
-            }
-
-            // 4) Compute *current* net pay
-            decimal available;
-            try
-            {
-                available = await _svc.GetEmployeeCurrentNetPayAsync(
-                    tok.AccessToken, tok.CompanyId, employeeId);
-            }
-            catch (UnauthorizedAccessException)
-            {
-                ModelState.AddModelError("",
-                    "Gusto session expired and cannot be refreshed automatically. Please reconnect.");
-                return View(m);
-            }
-            catch (Exception ex)
-            {
-                ModelState.AddModelError("", $"Could not determine net pay: {ex.Message}");
-                return View(m);
-            }
-
-            // 5) Enforce the affordability check (including $5 fee)
+            var empId = await _svc.FindEmployeeIdByEmailAsync(tok.AccessToken, tok.CompanyId, m.EmployeeEmail!);
+            var available = await _svc.GetEmployeeCurrentNetPayAsync(tok.AccessToken, tok.CompanyId, empId);
             const decimal Fee = 5m;
-            var requested = m.DeductionAmount!.Value;
-            var totalToDeduct = requested + Fee;
+            var total = m.DeductionAmount!.Value + Fee;
 
-            if (totalToDeduct > available)
+            if (total > available)
             {
                 ModelState.AddModelError(nameof(m.DeductionAmount),
-                    $"Insufficient funds: you have {available:C} available this pay period, " +
-                    $"but tried to deduct {totalToDeduct:C} (including {Fee:C} fee).");
+                    $"Insufficient funds: {available:C} available, need {total:C}.");
                 return View(m);
             }
 
-            // 6) Ensure post-tax benefit exists
-            string benefitUuid;
-            try
-            {
-                benefitUuid = await _svc.EnsurePostTaxBenefitAsync(
-                    tok.AccessToken, tok.CompanyId);
-            }
-            catch (Exception ex)
-            {
-                ModelState.AddModelError("", $"Benefit setup failed: {ex.Message}");
-                return View(m);
-            }
-
-            // 7) Persist local advance
             _db.EmployeeAdvances.Add(new EmployeeAdvance
             {
-                EmployeeId = employeeId,
-                Amount = totalToDeduct,
+                EmployeeId = empId,
+                Amount = total,
                 CreatedAt = DateTime.UtcNow
             });
             await _db.SaveChangesAsync();
 
-            // 8) Create the deduction in Gusto
-            try
-            {
-                await _svc.CreateEmployeeBenefitAsync(
-                    tok.AccessToken, employeeId, benefitUuid, totalToDeduct);
-            }
-            catch (Exception ex)
-            {
-                ModelState.AddModelError("", $"Gusto deduction failed: {ex.Message}");
-                return View(m);
-            }
+            await _svc.CreateEmployeeBenefitAsync(tok.AccessToken, empId, m.SelectedBenefitUuid!, total);
 
-            // 9) Success
-            TempData["Success"] =
-                $"Deduction of {totalToDeduct:C} (including {Fee:C} fee) created successfully!";
+            TempData["Success"] = $"Deduction of {total:C} created!";
             return RedirectToAction(nameof(Deduction));
         }
 
+        [HttpGet]
+        public async Task<IActionResult> TimesheetsRaw(DateTime? start, DateTime? end)
+        {
+            var tok = await GetValidTokenAsync();
+            if (tok == null) return Unauthorized();
 
+            var ps = start ?? DateTime.UtcNow.AddDays(-7);
+            var pe = end ?? DateTime.UtcNow;
+            var json = await _svc.GetRawTimeSheetsJsonAsync(tok.AccessToken, tok.CompanyId, ps, pe);
+            return Content(json, "application/json");
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> Timesheets(DateTime? start, DateTime? end)
+        {
+            var tok = await GetValidTokenAsync();
+            if (tok == null) return Unauthorized();
+
+            var ps = start ?? DateTime.UtcNow.AddDays(-7);
+            var pe = end ?? DateTime.UtcNow;
+
+            var entries = await _svc.GetTimesheetEntriesAsync(tok.AccessToken, tok.CompanyId, ps, pe);
+
+            var rates = await Task.WhenAll(
+                entries.Select(e => e.EmployeeUuid).Distinct()
+                       .Select(async emp =>
+                       {
+                           var r = await _svc.GetHourlyRateAsync(tok.AccessToken, tok.CompanyId, emp);
+                           return (emp, r);
+                       })
+            );
+            var dict = rates.ToDictionary(x => x.emp, x => x.r);
+
+            var vm = entries.Select(e => new TimesheetEntryViewModel
+            {
+                EmployeeName = e.EmployeeName,
+                Date = e.StartDate,
+                HoursWorked = e.Hours,
+                Project = e.Project,
+                HourlyRate = dict[e.EmployeeUuid]
+            })
+            .OrderBy(x => x.EmployeeName)
+            .ThenBy(x => x.Date)
+            .ToList();
+
+            return View(vm);
+        }
+
+        private async Task<GustoUserToken?> GetValidTokenAsync()
+        {
+            var uid = User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var tok = await _db.GustoTokens.FirstOrDefaultAsync(t => t.UserId == uid!);
+            if (tok == null) return null;
+
+            var expiresAt = tok.CreatedAt.AddSeconds(tok.ExpiresIn);
+            if (DateTime.UtcNow >= expiresAt)
+            {
+                var json = await _svc.ExchangeRefreshTokenAsync(tok.RefreshToken);
+                await _svc.SaveTokenAsync(uid!, json);
+                tok = await _db.GustoTokens.FirstAsync(t => t.UserId == uid!);
+            }
+            return tok;
+        }
     }
 }

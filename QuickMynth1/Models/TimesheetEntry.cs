@@ -1,30 +1,31 @@
-﻿using System;
-using System.ComponentModel.DataAnnotations;
+﻿// Models/TimesheetEntry.cs
+using System;
+using System.Text.Json.Serialization;
 
 namespace QuickMynth1.Models
 {
     public class TimesheetEntry
     {
-        [Key]
-        public int Id { get; set; }
+        [JsonPropertyName("uuid")]
+        public string Uuid { get; set; } = null!;
 
-        [Required]
-        public string ExternalId { get; set; } = default!;  // from Gusto webhook
+        [JsonPropertyName("employee_uuid")]
+        public string EmployeeUuid { get; set; } = null!;
 
-        [Required]
-        public string EmployeeId { get; set; } = default!;
+        [JsonPropertyName("employee_name")]
+        public string EmployeeName { get; set; } = null!;
 
-        [Required]
-        public string EmployeeName { get; set; } = default!;
+        [JsonPropertyName("start_date")]
+        public DateTime StartDate { get; set; }
 
-        [Required]
-        [DataType(DataType.Date)]
-        public DateTime Date { get; set; }
+        [JsonPropertyName("hours")]
+        public decimal Hours { get; set; }
 
-        [Required]
-        [Range(0, 24)]
-        public decimal HoursWorked { get; set; }
-
+        [JsonPropertyName("project")]
         public string? Project { get; set; }
     }
 }
+
+
+
+

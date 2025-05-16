@@ -1,0 +1,27 @@
+﻿@model List<QuickMynth1.Models.ViewModels.TimesheetEntryViewModel>
+
+<h2>Time Tracking Details</h2>
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>Employee</th>
+            <th>Classification</th>
+            <th>Hours</th>
+            <th>Rate</th>
+            <th>Earned</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var e in Model)
+        {
+            <tr>
+                <td>@e.EmployeeName</td>
+                <td>@e.Project</td>         <!-- we stashed classification here -->
+                <td>@e.HoursWorked</td>
+                <td>@e.HourlyRate.ToString("C")</td>
+                <td>@e.Earned.ToString("C")</td>
+            </tr>
+        }
+    </tbody>
+</table>
+
